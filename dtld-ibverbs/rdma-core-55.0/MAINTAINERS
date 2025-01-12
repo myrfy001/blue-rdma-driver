@@ -159,6 +159,11 @@ M:	Ariel Elior <ariel.elior@marvell.com>
 S:	Supported
 F:	providers/qedr/
 
+BLUERDMA USERSPACE PROVIDER (for bluerdma.ko)
+M:	Hange Shen <Foreverhighness@gmail.com>
+S:	Supported
+F:	providers/bluerdma/
+
 RXE SOFT ROCEE USERSPACE PROVIDER (for rdma_rxe.ko)
 M:	Moni Shoua <monis@mellanox.com>
 S:	Supported

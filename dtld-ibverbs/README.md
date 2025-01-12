@@ -14,6 +14,9 @@ ib_write_bw --size 65536 --bidirectional --duration 5 --qp 3 localhost
 
 ltrace -c --library "libibverbs*" -- ib_write_bw --size 65536 --bidirectional --duration 5 --qp 3
 ltrace -c --library "libibverbs*" -- ib_write_bw --size 65536 --bidirectional --duration 5 --qp 3 localhost
+
+ltrace -c --library "libibverbs*" -- ibv_rc_pingpong --ib-dev bluerdma0 --gid-idx 0
+ltrace -c --library "libibverbs*" -- ibv_rc_pingpong --ib-dev bluerdma1 --gid-idx 0 localhost
 ```
 
 - [x] perftest
