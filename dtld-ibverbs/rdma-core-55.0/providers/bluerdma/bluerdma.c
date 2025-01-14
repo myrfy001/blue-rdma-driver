@@ -33,6 +33,8 @@
  * SOFTWARE.
  */
 
+#include <dlfcn.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <infiniband/driver.h>
@@ -201,7 +203,13 @@ static int bluerdma_post_recv(struct ibv_qp *ibqp, struct ibv_recv_wr *recv_wr,
 	return 0;
 }
 
-static const struct verbs_context_ops bluerdma_ctx_ops = {
+static int bluerdma_req_notify_cq(struct ibv_cq *ibcq, int solicited_only)
+{
+	verbs_info(verbs_get_ctx(ibcq->context), "bluerdma req notify cq\n");
+	return 0;
+}
+
+static struct verbs_context_ops bluerdma_ctx_ops = {
 	.query_device_ex = bluerdma_query_device,
 	.query_port = bluerdma_query_port,
 	.alloc_pd = bluerdma_alloc_pd,
@@ -214,7 +222,7 @@ static const struct verbs_context_ops bluerdma_ctx_ops = {
 	.create_cq = bluerdma_create_cq,
 	// .create_cq_ex = bluerdma_create_cq_ex,
 	.poll_cq = bluerdma_poll_cq,
-	.req_notify_cq = ibv_cmd_req_notify_cq,
+	.req_notify_cq = bluerdma_req_notify_cq,
 	// .resize_cq = bluerdma_resize_cq,
 	.destroy_cq = bluerdma_destroy_cq,
 	// .create_srq = bluerdma_create_srq,
@@ -232,14 +240,107 @@ static const struct verbs_context_ops bluerdma_ctx_ops = {
 	.post_recv = bluerdma_post_recv,
 	// .create_ah = bluerdma_create_ah,
 	// .destroy_ah = bluerdma_destroy_ah,
-	.attach_mcast = ibv_cmd_attach_mcast,
-	.detach_mcast = ibv_cmd_detach_mcast,
+	// .attach_mcast = ibv_cmd_attach_mcast,
+	// .detach_mcast = ibv_cmd_detach_mcast,
 	.free_context = bluerdma_free_context,
 };
+
+static void bluerdma_set_ops(void *dl_handler, struct verbs_context_ops *ops)
+{
+#define SET_OP(op)                                                             \
+	do {                                                                   \
+		fn = dlsym(dl_handler, "bluerdma_" #op);                       \
+		if (fn) {                                                      \
+			printf("Setting op %s\n", #op);                        \
+			ops->op = fn;                                          \
+		}                                                              \
+	} while (0)
+
+	void *fn = NULL;
+
+	SET_OP(advise_mr);
+	SET_OP(alloc_dm);
+	SET_OP(alloc_mw);
+	SET_OP(alloc_null_mr);
+	SET_OP(alloc_parent_domain);
+	SET_OP(alloc_pd);
+	SET_OP(alloc_td);
+	SET_OP(async_event);
+	SET_OP(attach_counters_point_flow);
+	SET_OP(attach_mcast);
+	SET_OP(bind_mw);
+	SET_OP(close_xrcd);
+	SET_OP(cq_event);
+	SET_OP(create_ah);
+	SET_OP(create_counters);
+	SET_OP(create_cq);
+	SET_OP(create_cq_ex);
+	SET_OP(create_flow);
+	SET_OP(create_flow_action_esp);
+	SET_OP(create_qp);
+	SET_OP(create_qp_ex);
+	SET_OP(create_rwq_ind_table);
+	SET_OP(create_srq);
+	SET_OP(create_srq_ex);
+	SET_OP(create_wq);
+	SET_OP(dealloc_mw);
+	SET_OP(dealloc_pd);
+	SET_OP(dealloc_td);
+	SET_OP(dereg_mr);
+	SET_OP(destroy_ah);
+	SET_OP(destroy_counters);
+	SET_OP(destroy_cq);
+	SET_OP(destroy_flow);
+	SET_OP(destroy_flow_action);
+	SET_OP(destroy_qp);
+	SET_OP(destroy_rwq_ind_table);
+	SET_OP(destroy_srq);
+	SET_OP(destroy_wq);
+	SET_OP(detach_mcast);
+	SET_OP(free_context);
+	SET_OP(free_dm);
+	SET_OP(get_srq_num);
+	SET_OP(import_dm);
+	SET_OP(import_mr);
+	SET_OP(import_pd);
+	SET_OP(modify_cq);
+	SET_OP(modify_flow_action_esp);
+	SET_OP(modify_qp);
+	SET_OP(modify_qp_rate_limit);
+	SET_OP(modify_srq);
+	SET_OP(modify_wq);
+	SET_OP(open_qp);
+	SET_OP(open_xrcd);
+	SET_OP(poll_cq);
+	SET_OP(post_recv);
+	SET_OP(post_send);
+	SET_OP(post_srq_ops);
+	SET_OP(post_srq_recv);
+	SET_OP(query_device_ex);
+	SET_OP(query_ece);
+	SET_OP(query_port);
+	SET_OP(query_qp);
+	SET_OP(query_qp_data_in_order);
+	SET_OP(query_rt_values);
+	SET_OP(query_srq);
+	SET_OP(read_counters);
+	SET_OP(reg_dm_mr);
+	SET_OP(reg_dmabuf_mr);
+	SET_OP(reg_mr);
+	SET_OP(req_notify_cq);
+	SET_OP(rereg_mr);
+	SET_OP(resize_cq);
+	SET_OP(set_ece);
+	SET_OP(unimport_dm);
+	SET_OP(unimport_mr);
+	SET_OP(unimport_pd);
+#undef SET_OP
+}
 
 static struct verbs_context *
 bluerdma_alloc_context(struct ibv_device *ibdev, int cmd_fd, void *private_data)
 {
+	struct bluerdma_device *dev = to_bdev(ibdev);
 	struct bluerdma_context *context;
 
 	context = verbs_init_and_alloc_context(ibdev, cmd_fd, context, ibv_ctx,
@@ -253,6 +354,9 @@ bluerdma_alloc_context(struct ibv_device *ibdev, int cmd_fd, void *private_data)
 	verbs_info(&context->ibv_ctx, "bluerdma alloc context\n");
 
 	verbs_set_ops(&context->ibv_ctx, &bluerdma_ctx_ops);
+	verbs_set_ops(&context->ibv_ctx, dev->ops);
+
+	dev->driver_data = dev->driver_new(ibdev->dev_name);
 
 	return &context->ibv_ctx;
 
@@ -277,6 +381,11 @@ static void bluerdma_uninit_device(struct verbs_device *verbs_device)
 {
 	struct bluerdma_device *dev = to_bdev(&verbs_device->device);
 
+	assert(dev->dl_handle);
+
+	free(dev->ops);
+	dev->driver_free(dev->driver_data);
+	dlclose(dev->dl_handle);
 	free(dev);
 }
 
@@ -284,14 +393,58 @@ static struct verbs_device *
 bluerdma_device_alloc(struct verbs_sysfs_dev *sysfs_dev)
 {
 	struct bluerdma_device *dev;
+	struct verbs_context_ops *ops;
+	void *dl_handler;
+	void *(*driver_new)(char *);
+	void (*driver_free)(void *);
+	void (*driver_init)(void);
 
 	dev = calloc(1, sizeof(*dev));
 	if (!dev)
 		return NULL;
-
 	dev->abi_version = sysfs_dev->abi_ver;
 
+	dl_handler = dlopen("libbluerdma_rust.so", RTLD_NOW);
+	if (!dl_handler) {
+		printf("dlopen failed: %s\n", dlerror());
+		goto err_dev;
+	}
+	dlerror(); // clear any existing dl error
+	dev->dl_handle = dl_handler;
+
+	driver_init = dlsym(dl_handler, "bluerdma_init");
+	driver_new = dlsym(dl_handler, "bluerdma_new");
+	driver_free = dlsym(dl_handler, "bluerdma_free");
+	if (!driver_new || !driver_free || !driver_init) {
+		printf("dlsym failed: %s\n", dlerror());
+		goto err_dl;
+	}
+	driver_init();
+	dev->driver_new = driver_new;
+	dev->driver_free = driver_free;
+
+	ops = calloc(1, sizeof(*ops));
+	if (!ops) {
+		printf("calloc failed\n");
+		goto err_driver;
+	}
+
+	bluerdma_set_ops(dl_handler, ops);
+	dev->ops = ops;
+
+	printf("bluerdma device allocated\n");
+
 	return &dev->ibv_dev;
+
+err_driver:
+	driver_free(dev->driver_data);
+
+err_dl:
+	dlclose(dl_handler);
+
+err_dev:
+	free(dev);
+	return NULL;
 }
 
 static const struct verbs_device_ops bluerdma_dev_ops = {

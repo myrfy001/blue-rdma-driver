@@ -46,7 +46,14 @@
 
 struct bluerdma_device {
 	struct verbs_device ibv_dev;
+	void *driver_data;
 	int abi_version;
+
+	// TODO(fh): remove ops, because initialing in `device_alloc` is thread safe
+	struct verbs_context_ops *ops;
+	void *dl_handle;
+	void *(*driver_new)(char *);
+	void (*driver_free)(void *);
 };
 
 struct bluerdma_context {
