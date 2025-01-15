@@ -297,7 +297,7 @@ static void bluerdma_set_ops(void *dl_handler, struct verbs_context_ops *ops)
 	SET_OP(destroy_srq);
 	SET_OP(destroy_wq);
 	SET_OP(detach_mcast);
-	// SET_OP(free_context);
+	// SET_OP(free_context); // allocate in C, free in C
 	SET_OP(free_dm);
 	SET_OP(get_srq_num);
 	SET_OP(import_dm);

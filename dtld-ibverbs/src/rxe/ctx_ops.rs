@@ -5,6 +5,8 @@ use ffi::{ibv_free_device_list, ibv_get_device_list, ibv_open_device};
 
 use super::imp::{Rxe, to_rxe_context};
 
+const RXE_DEVICE_NAME: &str = "eno_rxe";
+
 #[unsafe(export_name = "bluerdma_init")]
 pub unsafe extern "C" fn init() {
     let _ = env_logger::try_init();
@@ -26,8 +28,15 @@ pub unsafe extern "C" fn new(sysfs_name: *const c_char) -> *mut c_void {
     // Safety: `list` is at least `num_devices` long.
     let device_list = unsafe { std::slice::from_raw_parts(list, num_devices.try_into().unwrap()) };
 
-    // TODO: remove hardcode index
-    let rxe_device = device_list[0];
+    let Some(rxe_device) = device_list.iter().copied().find(|dev_ptr| {
+        unsafe { dev_ptr.as_ref() }
+            .map(|dev| dev.name.as_ptr())
+            .map(|name| unsafe { CStr::from_ptr(name) })
+            .map(|name| name.to_str() == Ok(RXE_DEVICE_NAME))
+            .unwrap_or(false)
+    }) else {
+        return ptr::null_mut();
+    };
 
     let rxe = unsafe { ibv_open_device(rxe_device) };
 
@@ -69,31 +78,31 @@ pub unsafe extern "C" fn dealloc_pd(pd: *mut ffi::ibv_pd) -> ::std::os::raw::c_i
 
 #[unsafe(export_name = "bluerdma_query_device_ex")]
 pub unsafe extern "C" fn query_device_ex(
-    context: *mut ffi::ibv_context,
+    blue_context: *mut ffi::ibv_context,
     _input: *const ffi::ibv_query_device_ex_input,
     device_attr: *mut ffi::ibv_device_attr,
     _attr_size: usize,
 ) -> ::std::os::raw::c_int {
     log::info!("Querying device attributes");
 
-    let context = unsafe { to_rxe_context(context) };
-    let ctx = unsafe { context.as_ref() }.unwrap();
+    let rex_context = unsafe { to_rxe_context(blue_context) };
+    let ctx = unsafe { rex_context.as_ref() }.unwrap();
 
-    unsafe { ctx.ops._compat_query_device.unwrap()(context, device_attr) }
+    unsafe { ctx.ops._compat_query_device.unwrap()(rex_context, device_attr) }
 }
 
 #[unsafe(export_name = "bluerdma_query_port")]
 pub unsafe extern "C" fn query_port(
-    context: *mut ffi::ibv_context,
+    blue_context: *mut ffi::ibv_context,
     port_num: u8,
     port_attr: *mut ffi::ibv_port_attr,
 ) -> ::std::os::raw::c_int {
     log::info!("Querying port attributes");
 
-    let context = unsafe { to_rxe_context(context) };
-    let ctx = unsafe { context.as_ref() }.unwrap();
+    let rxe_context = unsafe { to_rxe_context(blue_context) };
+    let ctx = unsafe { rxe_context.as_ref() }.unwrap();
 
-    unsafe { ctx.ops._compat_query_port.unwrap()(context, port_num, port_attr.cast()) }
+    unsafe { ctx.ops._compat_query_port.unwrap()(rxe_context, port_num, port_attr.cast()) }
 }
 
 #[unsafe(export_name = "bluerdma_create_cq")]
@@ -246,7 +255,7 @@ pub unsafe extern "C" fn post_send(
     wr: *mut ffi::ibv_send_wr,
     bad_wr: *mut *mut ffi::ibv_send_wr,
 ) -> ::std::os::raw::c_int {
-    log::info!("Posting send work request");
+    log::trace!("Posting send work request");
 
     let blue_context = unsafe { qp.as_ref() }.unwrap().context;
     let rxe_context = unsafe { to_rxe_context(blue_context) };
@@ -267,7 +276,7 @@ pub unsafe extern "C" fn post_recv(
     wr: *mut ffi::ibv_recv_wr,
     bad_wr: *mut *mut ffi::ibv_recv_wr,
 ) -> ::std::os::raw::c_int {
-    log::info!("Posting receive work request");
+    log::trace!("Posting receive work request");
 
     let blue_context = unsafe { qp.as_ref() }.unwrap().context;
     let rxe_context = unsafe { to_rxe_context(blue_context) };
@@ -284,7 +293,7 @@ pub unsafe extern "C" fn post_recv(
 
 #[unsafe(export_name = "bluerdma_poll_cq")]
 pub unsafe extern "C" fn poll_cq(cq: *mut ffi::ibv_cq, num_entries: i32, wc: *mut ffi::ibv_wc) -> i32 {
-    log::info!("Polling completion queue");
+    log::trace!("Polling completion queue");
 
     let blue_context = unsafe { cq.as_ref() }.unwrap().context;
     let rxe_context = unsafe { to_rxe_context(blue_context) };
