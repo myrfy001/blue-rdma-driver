@@ -18,7 +18,7 @@ int bluerdma_query_port(struct ib_device *ibdev, u32 port_num,
 
 	memset(attr, 0, sizeof(*attr));
 
-	// attr->gid_tbl_len = 1;
+	attr->gid_tbl_len = 1;
 	// attr->port_cap_flags = IB_PORT_CM_SUP | IB_PORT_DEVICE_MGMT_SUP;
 	// attr->max_msg_sz = -1;
 
@@ -158,10 +158,9 @@ int bluerdma_get_port_immutable(struct ib_device *ibdev, u32 port_num,
 	if (err)
 		goto err_out;
 
-	immutable->core_cap_flags = RDMA_CORE_PORT_IBA_ROCE_UDP_ENCAP;
-	immutable->pkey_tbl_len = attr.pkey_tbl_len;
-	immutable->gid_tbl_len = attr.gid_tbl_len;
-	immutable->max_mad_size = IB_MGMT_MAD_SIZE;
+	immutable->core_cap_flags = RDMA_CORE_CAP_PROT_USNIC;
+	immutable->pkey_tbl_len = 1;
+	immutable->gid_tbl_len = 1;
 
 	return 0;
 
@@ -192,6 +191,13 @@ int bluerdma_query_pkey(struct ib_device *ibdev, u32 port_num, u16 index,
 int bluerdma_query_gid(struct ib_device *ibdev, u32 port_num, int index,
 		       union ib_gid *gid)
 {
-	pr_info("bluerdma_query_gid\n");
+	struct bluerdma_dev *dev = to_bdev(ibdev);
+	int i;
+
+	pr_info("bluerdma_query_gid: %d\n", dev->id + 1);
+	for (i = 0; i < 16; i++) {
+		gid->raw[i] = dev->id + 1;
+	}
+
 	return 0;
 }

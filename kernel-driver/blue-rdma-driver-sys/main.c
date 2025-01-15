@@ -30,7 +30,8 @@ static int bluerdma_new_testing(void)
 			return -ENOMEM;
 		}
 		testing_dev[i] = dev;
-		pr_info("ib_alloc_device ok for index %d\n", i);
+		dev->id = i;
+		pr_info("ib_alloc_device ok for index %d\n", dev->id);
 	}
 
 	return 0;
@@ -84,6 +85,9 @@ static const struct ib_device_ops bluerdma_device_ops = {
 	.alloc_ucontext = bluerdma_alloc_ucontext,
 	.dealloc_ucontext = bluerdma_dealloc_ucontext,
 
+	.query_gid = bluerdma_query_gid,
+	// .query_pkey = bluerdma_query_pkey,
+
 	// init size
 	// INIT_RDMA_OBJ_SIZE(ib_ah, bluerdma_ah, ibah),
 	INIT_RDMA_OBJ_SIZE(ib_cq, bluerdma_cq, ibcq),
@@ -112,20 +116,10 @@ static int bluerdma_ib_device_add(struct pci_dev *pdev)
 
 		strscpy(ibdev->node_desc, "bluerdma", sizeof(ibdev->node_desc));
 
-		ibdev->node_type = RDMA_NODE_IB_CA;
+		ibdev->node_type = RDMA_NODE_UNSPECIFIED;
 		ibdev->phys_port_cnt = 1;
 		ibdev->num_comp_vectors = num_possible_cpus();
 		ibdev->local_dma_lkey = 0;
-
-		// Set uverbs cmd mask
-		ibdev->uverbs_cmd_mask =
-			(1ull << IB_USER_VERBS_CMD_GET_CONTEXT) |
-			(1ull << IB_USER_VERBS_CMD_QUERY_DEVICE) |
-			(1ull << IB_USER_VERBS_CMD_QUERY_PORT) |
-			(1ull << IB_USER_VERBS_CMD_ALLOC_PD) |
-			(1ull << IB_USER_VERBS_CMD_DEALLOC_PD) |
-			(1ull << IB_USER_VERBS_CMD_POST_SEND) |
-			(1ull << IB_USER_VERBS_CMD_REQ_NOTIFY_CQ);
 
 		ib_set_device_ops(ibdev, &bluerdma_device_ops);
 		pr_info("ib_set_device_ops ok for index %d\n", i);

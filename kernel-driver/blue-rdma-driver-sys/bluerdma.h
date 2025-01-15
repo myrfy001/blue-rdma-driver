@@ -14,6 +14,8 @@ struct bluerdma_dev {
 	struct ib_device_attr attr;
 	struct ib_port_attr port_attr;
 	enum ib_port_state state;
+
+	int id;
 };
 
 static inline struct bluerdma_dev *to_bdev(struct ib_device *ibdev)

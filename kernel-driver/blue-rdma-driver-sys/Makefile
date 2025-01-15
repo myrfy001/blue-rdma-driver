@@ -13,7 +13,11 @@ test: bluerdma.ko
 bluerdma.ko: main.c verbs.c
 	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD)
 
+qemu: main.c verbs.c
+	$(MAKE) -C /linux-src M=$(PWD)
+
 clean:
+	rm -f bluerdma.ko
 	sudo rmmod bluerdma
 
-.PHONY: test clean
+.PHONY: test clean qemu
