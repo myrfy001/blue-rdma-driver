@@ -31,7 +31,7 @@ ipnetwork = { version = "0.21.0", features = ["serde"] }
 thiserror = "2.0.9"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
-ibverbs-sys = { path = "../rust-ibverbs/ibverbs-sys" }
+ibverbs-sys = { git = "https://github.com/bsbds/rust-ibverbs.git", rev = "ea06bdc" }
 crossbeam-deque = "0.8.6"
 rtrb = "0.3.2"
 rand = "0.8.5"
