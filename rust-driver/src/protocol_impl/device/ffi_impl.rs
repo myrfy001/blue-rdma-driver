@@ -7,7 +7,8 @@ use crate::{
     config::{ConfigLoader, DeviceConfig},
     ctx_ops::RdmaCtxOps,
     mem::{
-        page::EmulatedPageAllocator, virt_to_phy::PhysAddrResolverEmulated, EmulatedUmemHandler,
+        page::EmulatedPageAllocator, sim_alloc, virt_to_phy::PhysAddrResolverEmulated,
+        EmulatedUmemHandler,
     },
     net::config::{MacAddress, NetworkConfig},
     recv::RecvWr,
@@ -29,7 +30,7 @@ const CARD_IP_ADDRESS: u32 = 0x1122_330A;
 const POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 const POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 2);
 
-static HEAP_ALLOCATOR: bluesimalloc::BlueSimalloc = bluesimalloc::BlueSimalloc::new();
+static HEAP_ALLOCATOR: sim_alloc::Simalloc = sim_alloc::Simalloc::new();
 
 #[allow(
     missing_debug_implementations,
@@ -61,11 +62,11 @@ impl BlueRdmaCore {
     fn new_emulated(sysfs_name: &str) -> io::Result<HwDeviceCtx<EmulatedHwDevice>> {
         let device = match sysfs_name {
             "uverbs0" => {
-                bluesimalloc::init_global_allocator(0, &HEAP_ALLOCATOR);
+                sim_alloc::init_global_allocator(0, &HEAP_ALLOCATOR);
                 EmulatedHwDevice::new("127.0.0.1:7701".into())
             }
             "uverbs1" => {
-                bluesimalloc::init_global_allocator(1, &HEAP_ALLOCATOR);
+                sim_alloc::init_global_allocator(1, &HEAP_ALLOCATOR);
                 EmulatedHwDevice::new("127.0.0.1:7702".into())
             }
             _ => unreachable!("unexpected sysfs_name"),
@@ -117,12 +118,12 @@ impl HwDevice for EmulatedHwDevice {
 
     fn new_dma_buf_allocator(&self) -> io::Result<Self::DmaBufAllocator> {
         Ok(EmulatedPageAllocator::new(
-            bluesimalloc::page_start_addr()..bluesimalloc::heap_start_addr(),
+            sim_alloc::page_start_addr()..sim_alloc::heap_start_addr(),
         ))
     }
 
     fn new_umem_handler(&self) -> Self::UmemHandler {
-        EmulatedUmemHandler::new(bluesimalloc::shm_start_addr() as u64)
+        EmulatedUmemHandler::new(sim_alloc::shm_start_addr() as u64)
     }
 }
 

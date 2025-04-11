@@ -18,6 +18,8 @@ pub(crate) mod u_dma_buf;
 
 mod utils;
 
+pub(crate) mod sim_alloc;
+
 use page::MmapMut;
 pub(crate) use utils::*;
 use virt_to_phy::{AddressResolver, PhysAddrResolverEmulated, PhysAddrResolverLinuxX86};

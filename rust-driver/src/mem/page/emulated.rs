@@ -1,6 +1,7 @@
 use std::{ffi::c_void, io, ops::Range};
 
 use crate::mem::{
+    sim_alloc,
     virt_to_phy::{AddressResolver, PhysAddrResolverEmulated},
     DmaBuf, DmaBufAllocator, PageWithPhysAddr, PAGE_SIZE,
 };
@@ -50,7 +51,7 @@ impl DmaBufAllocator for EmulatedPageAllocator<1> {
             .inner
             .pop()
             .ok_or(io::Error::from(io::ErrorKind::OutOfMemory))?;
-        let resolver = PhysAddrResolverEmulated::new(bluesimalloc::shm_start_addr() as u64);
+        let resolver = PhysAddrResolverEmulated::new(sim_alloc::shm_start_addr() as u64);
         let phys_addr = resolver.virt_to_phys(buf.as_ptr() as u64)?.unwrap();
         Ok(DmaBuf::new(buf, phys_addr))
     }
