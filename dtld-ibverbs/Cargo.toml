@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 libc = "0.2"
 env_logger = "0.11.6"
 log = "0.4.25"
-blue-rdma-driver = { path = "../blue-rdma-driver", version = "0.1.0" }
+blue-rdma-driver = { path = "../rust-driver", version = "0.1.0" }
 
 # FFI bindings, may replaced with bindgen in the future
-ffi = { package = "ibverbs-sys", version = "=0.3.1" }
+ffi = { package = "ibverbs-sys", git = "https://github.com/bsbds/rust-ibverbs.git", rev = "ea06bdc" }
