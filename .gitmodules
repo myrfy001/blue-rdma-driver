@@ -1,0 +1,3 @@
+[submodule "third_party/udmabuf"]
+	path = third_party/udmabuf
+	url = https://github.com/ikwzm/udmabuf.git
