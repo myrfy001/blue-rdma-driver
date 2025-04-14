@@ -1,4 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
+KERNEL_DIR ?= /lib/modules/$(shell uname -r)/build
+
 obj-m := bluerdma.o
 
 bluerdma-y := \
@@ -11,7 +13,7 @@ test: bluerdma.ko
 	ls /dev/infiniband
 
 bluerdma.ko: main.c verbs.c
-	$(MAKE) -C /lib/modules/$(shell uname -r)/build M=$(PWD)
+	$(MAKE) -C $(KERNEL_DIR) M=$(PWD)
 
 qemu: main.c verbs.c
 	$(MAKE) -C /linux-src M=$(PWD)
