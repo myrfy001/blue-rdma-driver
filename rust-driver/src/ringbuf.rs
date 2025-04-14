@@ -115,11 +115,11 @@ impl<T: Copy> DmaRingBuf<T> {
     }
 
     fn head_idx(&self) -> usize {
-        self.head & RING_BUF_LEN
+        self.head & RING_BUF_LEN_MASK
     }
 
     fn tail_idx(&self) -> usize {
-        self.tail & RING_BUF_LEN
+        self.tail & RING_BUF_LEN_MASK
     }
 }
 
