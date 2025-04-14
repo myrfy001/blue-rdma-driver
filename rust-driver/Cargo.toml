@@ -13,6 +13,7 @@ edition = "2021"
 default = ["page_size_2m"]
 page_size_2m = []
 page_size_4k = []
+debug_csrs = []
 
 [dependencies]
 bilge = "0.2.0"

@@ -151,6 +151,7 @@ impl PciHwDevice {
         Ok(())
     }
 
+    #[cfg(feature = "debug_csrs")]
     pub(crate) fn set_custom(&self) -> io::Result<()> {
         let mut cfg = CustomCsrConfigurator::new(&self.sysfs_path)?;
         cfg.set_loopback();
