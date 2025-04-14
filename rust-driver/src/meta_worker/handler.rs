@@ -153,8 +153,9 @@ impl MetaHandler {
         if meta.ack_req {
             let end_psn = meta.psn + 1;
             let event = Event::Recv(RecvEvent::new(
-                RecvEventOp::WriteAckReq,
+                RecvEventOp::RecvRead,
                 MessageMeta::new(meta.msn, end_psn),
+                true,
             ));
             let _ignore = self.completion_tx.send(CompletionTask::Register {
                 qpn: meta.dqpn,
@@ -211,11 +212,21 @@ impl MetaHandler {
         if matches!(pos, PacketPos::Last | PacketPos::Only) {
             let end_psn = psn + 1;
             match header_type {
-                HeaderType::Write => {}
+                HeaderType::Write => {
+                    let event = Event::Recv(RecvEvent::new(
+                        RecvEventOp::Write,
+                        MessageMeta::new(msn, end_psn),
+                        ack_req,
+                    ));
+                    let _ignore = self
+                        .completion_tx
+                        .send(CompletionTask::Register { qpn: dqpn, event });
+                }
                 HeaderType::WriteWithImm => {
                     let event = Event::Recv(RecvEvent::new(
                         RecvEventOp::WriteWithImm { imm },
                         MessageMeta::new(msn, end_psn),
+                        ack_req,
                     ));
                     let _ignore = self
                         .completion_tx
@@ -225,6 +236,7 @@ impl MetaHandler {
                     let event = Event::Recv(RecvEvent::new(
                         RecvEventOp::Recv,
                         MessageMeta::new(msn, end_psn),
+                        ack_req,
                     ));
                     let _ignore = self
                         .completion_tx
@@ -234,6 +246,7 @@ impl MetaHandler {
                     let event = Event::Recv(RecvEvent::new(
                         RecvEventOp::RecvWithImm { imm },
                         MessageMeta::new(msn, end_psn),
+                        ack_req,
                     ));
                     let _ignore = self
                         .completion_tx
@@ -243,20 +256,12 @@ impl MetaHandler {
                     let event = Event::Recv(RecvEvent::new(
                         RecvEventOp::ReadResp,
                         MessageMeta::new(msn, end_psn),
+                        ack_req,
                     ));
                     let _ignore = self
                         .completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
-            }
-            if ack_req {
-                let event = Event::Recv(RecvEvent::new(
-                    RecvEventOp::WriteAckReq,
-                    MessageMeta::new(msn, end_psn),
-                ));
-                let _ignore = self
-                    .completion_tx
-                    .send(CompletionTask::Register { qpn: dqpn, event });
             }
         }
         if let Some(base_psn) = tracker.ack_one(psn) {

@@ -229,13 +229,14 @@ impl QueuePairMessageTracker {
                         self.ack_send(None, cq);
                     }
                 }
-                RecvEventOp::WriteAckReq => {
-                    let _ignore = ack_resp_tx.send(AckResponse::Ack {
-                        qpn,
-                        msn: event.meta().msn,
-                        last_psn: event.meta().end_psn,
-                    });
-                }
+                RecvEventOp::RecvRead | RecvEventOp::Write => {}
+            }
+            if event.ack_req {
+                let _ignore = ack_resp_tx.send(AckResponse::Ack {
+                    qpn,
+                    msn: event.meta().msn,
+                    last_psn: event.meta().end_psn,
+                });
             }
         }
     }
@@ -335,11 +336,12 @@ pub(crate) enum SendEventOp {
 pub(crate) struct RecvEvent {
     op: RecvEventOp,
     meta: MessageMeta,
+    ack_req: bool,
 }
 
 impl RecvEvent {
-    pub(crate) fn new(op: RecvEventOp, meta: MessageMeta) -> Self {
-        Self { op, meta }
+    pub(crate) fn new(op: RecvEventOp, meta: MessageMeta, ack_req: bool) -> Self {
+        Self { op, meta, ack_req }
     }
 }
 
@@ -351,11 +353,12 @@ impl EventMeta for RecvEvent {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum RecvEventOp {
+    Write,
     WriteWithImm { imm: u32 },
-    WriteAckReq,
     Recv,
     RecvWithImm { imm: u32 },
     ReadResp,
+    RecvRead,
 }
 
 #[derive(Debug, Clone, Copy)]
