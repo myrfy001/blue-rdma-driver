@@ -120,6 +120,9 @@ impl IbvSendQueue {
         let mut a = self.inner.partition_point(|x| x.psn <= psn_low);
         let mut b = self.inner.partition_point(|x| x.psn < psn_high);
         a = a.saturating_sub(1);
+        if (a..b).is_empty() {
+            return Vec::new();
+        }
         self.inner.range(a..b).copied().collect()
     }
 }
