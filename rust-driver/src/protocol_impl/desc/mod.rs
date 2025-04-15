@@ -125,6 +125,10 @@ impl RingBufDescUntyped {
     pub(crate) fn is_valid(&self) -> bool {
         self.head.valid()
     }
+
+    pub(crate) fn has_next(&self) -> bool {
+        self.head.has_next()
+    }
 }
 
 #[cfg(test)]

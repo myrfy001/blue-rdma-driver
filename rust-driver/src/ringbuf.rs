@@ -49,21 +49,66 @@ impl<T: Copy> DmaRingBuf<T> {
     where
         F: FnOnce(&T) -> bool,
     {
-        let value = unsafe { self.ptr.add(self.tail_idx()).read_volatile() };
+        let value = self.read_index(self.tail_idx());
         if cond(&value) {
             // Ensures that the value is read atomically from memory
             fence(Ordering::Acquire);
-            let value = unsafe { self.ptr.add(self.tail_idx()).read_volatile() };
-            unsafe {
-                self.ptr
-                    .add(self.tail_idx())
-                    .write_volatile(std::mem::zeroed());
-            }
-            self.inc_tail();
+            let value = self.read_and_advance(self.tail_idx());
             return Some(value);
         }
 
         None
+    }
+
+    pub(crate) fn pop_two<F, R>(
+        &mut self,
+        mut cond: F,
+        mut require_next: R,
+    ) -> (Option<T>, Option<T>)
+    where
+        F: FnMut(&T) -> bool,
+        R: FnMut(&T) -> bool,
+    {
+        let idx_first = self.tail_idx();
+        let idx_next = idx_first.wrapping_add(1) & RING_BUF_LEN_MASK;
+        let value_first = self.read_index(idx_first);
+        let value_next = self.read_index(idx_next);
+
+        match (
+            cond(&value_first),
+            cond(&value_next),
+            require_next(&value_first),
+        ) {
+            (true, true, true) => {
+                fence(Ordering::Acquire);
+                let value_first = self.read_and_advance(idx_first);
+                let value_next = self.read_and_advance(idx_next);
+                (Some(value_first), Some(value_next))
+            }
+            (true, _, false) => {
+                fence(Ordering::Acquire);
+                let value_first = self.read_and_advance(idx_first);
+                (Some(value_first), None)
+            }
+            (true, false, true) | (false, _, _) => (None, None),
+        }
+    }
+
+    fn read_index(&self, index: usize) -> T {
+        unsafe { self.ptr.add(index).read_volatile() }
+    }
+
+    fn zero_index(&mut self, index: usize) {
+        unsafe {
+            self.ptr.add(index).write_volatile(std::mem::zeroed());
+        }
+    }
+
+    fn read_and_advance(&mut self, index: usize) -> T {
+        let value = self.read_index(index);
+        self.zero_index(index);
+        self.inc_tail();
+        value
     }
 
     /// Returns the current head index in the ring buffer

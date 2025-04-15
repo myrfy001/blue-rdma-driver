@@ -54,7 +54,7 @@ impl<Dev: DeviceAdaptor> MetaReport for MetaReportQueueHandler<Dev> {
         for i in 0..num_queues {
             let idx = (self.pos + i) % num_queues;
             let ctx = &mut self.inner[idx];
-            let Some(desc) = ctx.queue.try_pop() else {
+            let Some(desc) = ctx.queue.pop() else {
                 continue;
             };
             let _ignore = ctx.proxy.write_tail(ctx.queue.tail());

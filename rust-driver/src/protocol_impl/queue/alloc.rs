@@ -30,6 +30,11 @@ impl DescRingBuffer {
     pub(crate) fn pop(&mut self) -> Option<RingBufDescUntyped> {
         self.0.pop(RingBufDescUntyped::is_valid)
     }
+
+    pub(crate) fn pop_two(&mut self) -> (Option<RingBufDescUntyped>, Option<RingBufDescUntyped>) {
+        self.0
+            .pop_two(RingBufDescUntyped::is_valid, RingBufDescUntyped::has_next)
+    }
 }
 
 impl Deref for DescRingBuffer {

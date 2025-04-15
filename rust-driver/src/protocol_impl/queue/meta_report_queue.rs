@@ -61,34 +61,30 @@ impl MetaReportQueue {
     }
 
     /// Tries to poll next valid entry from the queue
-    pub(crate) fn try_pop(&mut self) -> Option<MetaReportQueueDesc> {
-        let first = self.inner.pop().map(MetaReportQueueDescFirst::from)?;
-
-        if !first.has_next() {
-            return match first {
-                MetaReportQueueDescFirst::PacketInfo(d) if d.ecn_marked() => {
-                    Some(MetaReportQueueDesc::CnpPacketInfo(d))
-                }
-                MetaReportQueueDescFirst::PacketInfo(d) => {
-                    Some(MetaReportQueueDesc::WritePacketInfo(d))
-                }
-                MetaReportQueueDescFirst::Ack(d) => Some(MetaReportQueueDesc::Ack(d)),
-            };
-        }
-
-        let next = self.inner.pop().map_or_else(
-            || unreachable!("failed to read next descriptor"),
-            MetaReportQueueDescNext::from,
-        );
-        match (first, next) {
-            (MetaReportQueueDescFirst::PacketInfo(f), MetaReportQueueDescNext::ReadInfo(n)) => {
-                Some(MetaReportQueueDesc::ReadPacketInfo((f, n)))
+    pub(crate) fn pop(&mut self) -> Option<MetaReportQueueDesc> {
+        let (first, next) = self.inner.pop_two();
+        #[allow(clippy::wildcard_enum_match_arm)] // too verbose
+        match (
+            first.map(MetaReportQueueDescFirst::from),
+            next.map(MetaReportQueueDescNext::from),
+        ) {
+            (None, None) => None,
+            (Some(MetaReportQueueDescFirst::PacketInfo(d)), None) if d.ecn_marked() => {
+                Some(MetaReportQueueDesc::CnpPacketInfo(d))
             }
-            (MetaReportQueueDescFirst::Ack(f), MetaReportQueueDescNext::AckExtra(n)) => {
-                Some(MetaReportQueueDesc::Nak((f, n)))
+            (Some(MetaReportQueueDescFirst::PacketInfo(d)), None) => {
+                Some(MetaReportQueueDesc::WritePacketInfo(d))
             }
-            (MetaReportQueueDescFirst::PacketInfo(_), MetaReportQueueDescNext::AckExtra(_))
-            | (MetaReportQueueDescFirst::Ack(_), MetaReportQueueDescNext::ReadInfo(_)) => {
+            (Some(MetaReportQueueDescFirst::Ack(d)), None) => Some(MetaReportQueueDesc::Ack(d)),
+            (
+                Some(MetaReportQueueDescFirst::PacketInfo(f)),
+                Some(MetaReportQueueDescNext::ReadInfo(n)),
+            ) => Some(MetaReportQueueDesc::ReadPacketInfo((f, n))),
+            (
+                Some(MetaReportQueueDescFirst::Ack(f)),
+                Some(MetaReportQueueDescNext::AckExtra(n)),
+            ) => Some(MetaReportQueueDesc::Nak((f, n))),
+            _ => {
                 unreachable!("invalid descriptor format")
             }
         }
