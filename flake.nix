@@ -10,14 +10,11 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
+        kernel = pkgs.linuxPackages_6_12.kernel;
       in
       {
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
-            pkg-config
-          ];
-
-          buildInputs = with pkgs; [
             rdma-core
             cmake
             docutils
@@ -29,7 +26,13 @@
             libnl
             perl
             udev
+
+            gnumake
+            gcc
+            kernel.dev
           ];
+
+          KERNEL_DIR = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/build";
         };
       }
     );
