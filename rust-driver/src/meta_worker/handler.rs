@@ -10,7 +10,7 @@ use crate::{
     rdma_write_worker::RdmaWriteTask,
     send::{SendWrBase, SendWrRdma},
     timeout_retransmit::RetransmitTask,
-    tracker::{LocalAckTracker, RemoteAckTracker},
+    tracker::{AckOneResult, LocalAckTracker, RemoteAckTracker},
     utils::{Psn, QpTable},
 };
 
@@ -162,7 +162,7 @@ impl MetaHandler {
                 event,
             });
             let tracker = self.recv_table.get_qp_mut(meta.dqpn)?;
-            if let Some(base_psn) = tracker.ack_one(meta.psn) {
+            if let AckOneResult::Advanced(base_psn) = tracker.ack_one(meta.psn) {
                 let __ignore = self.completion_tx.send(CompletionTask::AckRecv {
                     qpn: meta.dqpn,
                     base_psn,
@@ -208,6 +208,11 @@ impl MetaHandler {
             header_type,
         } = meta;
         let tracker = self.recv_table.get_qp_mut(dqpn)?;
+        let ack_result = tracker.ack_one(psn);
+
+        if matches!(ack_result, AckOneResult::Duplicate) {
+            return Some(());
+        }
 
         if matches!(pos, PacketPos::Last | PacketPos::Only) {
             let end_psn = psn + 1;
@@ -264,12 +269,14 @@ impl MetaHandler {
                 }
             }
         }
-        if let Some(base_psn) = tracker.ack_one(psn) {
+
+        if let AckOneResult::Advanced(base_psn) = ack_result {
             let _ignore = self.completion_tx.send(CompletionTask::AckRecv {
                 qpn: dqpn,
                 base_psn,
             });
         }
+
         /// Timeout of an `AckReq` message, notify retransmission
         if matches!(pos, PacketPos::Last | PacketPos::Only) && is_retry && ack_req {
             let _ignore = self.ack_tx.send(AckResponse::Nak {
