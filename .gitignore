@@ -1,6 +1,14 @@
 target/
+build/
 .direnv
 .envrc
 .projectile-cache.eld
 .vscode
 .cache
+*.ko
+*.mod
+*.mod.c
+*.o
+*.cmd
+Module.symvers
+modules.order

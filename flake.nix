@@ -39,7 +39,7 @@
             kernel.dev
           ];
 
-          KERNEL_DIR = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/build";
+          KERNEL_SRC = "${kernel.dev}/lib/modules/${kernel.modDirVersion}/build";
         };
       }
     );
