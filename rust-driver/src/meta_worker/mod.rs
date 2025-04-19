@@ -14,15 +14,7 @@ use std::{
 
 use log::error;
 
-use crate::{
-    ack_responder::AckResponse,
-    completion::CompletionTask,
-    device_protocol::{MetaReport, ReportMeta},
-    packet_retransmit::PacketRetransmitTask,
-    qp::QueuePairAttrTable,
-    rdma_write_worker::RdmaWriteTask,
-    timeout_retransmit::RetransmitTask,
-};
+use crate::device_protocol::MetaReport;
 
 /// A worker for processing packet meta
 pub(crate) struct MetaWorker<T> {

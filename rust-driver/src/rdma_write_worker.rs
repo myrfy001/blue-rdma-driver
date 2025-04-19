@@ -3,6 +3,7 @@ use std::io;
 use parking_lot::Mutex;
 
 use crate::{
+    ack_timeout::AckTimeoutTask,
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
     device_protocol::{ChunkPos, QpParams, WorkReqOpCode, WorkReqSend, WrChunkBuilder},
@@ -11,7 +12,6 @@ use crate::{
     protocol_impl::SendQueueScheduler,
     qp::{num_psn, QueuePairAttrTable, SqContext},
     send::SendWrRdma,
-    timeout_retransmit::RetransmitTask,
     utils::{Psn, QpTable},
 };
 
@@ -44,7 +44,7 @@ pub(crate) struct RdmaWriteWorker {
     qp_attr_table: QueuePairAttrTable,
     send_scheduler: SendQueueScheduler,
     rdma_write_rx: flume::Receiver<RdmaWriteTask>,
-    retransmit_tx: flume::Sender<RetransmitTask>,
+    retransmit_tx: flume::Sender<AckTimeoutTask>,
     packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
     completion_tx: flume::Sender<CompletionTask>,
 }
@@ -54,7 +54,7 @@ impl RdmaWriteWorker {
         rdma_write_rx: flume::Receiver<RdmaWriteTask>,
         qp_attr_table: QueuePairAttrTable,
         send_scheduler: SendQueueScheduler,
-        retransmit_tx: flume::Sender<RetransmitTask>,
+        retransmit_tx: flume::Sender<AckTimeoutTask>,
         packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
         completion_tx: flume::Sender<CompletionTask>,
     ) -> Self {
@@ -146,6 +146,7 @@ impl RdmaWriteWorker {
                 .send_cq
                 .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
             let event = Event::Send(SendEvent::new(
+                qpn,
                 SendEventOp::ReadSignaled,
                 MessageMeta::new(msn, end_psn),
                 wr_id,
@@ -155,10 +156,7 @@ impl RdmaWriteWorker {
         }
 
         if ack_req {
-            let _ignore = self.retransmit_tx.send(RetransmitTask::NewAckReq {
-                qpn,
-                last_packet_chunk: chunk,
-            });
+            let _ignore = self.retransmit_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
         let _ignore = self.packet_retransmit_tx.send(PacketRetransmitTask::NewWr {
@@ -203,7 +201,12 @@ impl RdmaWriteWorker {
                 WorkReqOpCode::RdmaRead => SendEventOp::ReadSignaled,
                 _ => return Err(io::ErrorKind::Unsupported.into()),
             };
-            let event = Event::Send(SendEvent::new(op, MessageMeta::new(msn, end_psn), wr_id));
+            let event = Event::Send(SendEvent::new(
+                qpn,
+                op,
+                MessageMeta::new(msn, end_psn),
+                wr_id,
+            ));
             self.completion_tx
                 .send(CompletionTask::Register { qpn, event });
         }
@@ -222,10 +225,7 @@ impl RdmaWriteWorker {
             let Some(last_packet_chunk) = fragmenter.into_iter().last() else {
                 return Ok(());
             };
-            let _ignore = self.retransmit_tx.send(RetransmitTask::NewAckReq {
-                qpn,
-                last_packet_chunk,
-            });
+            let _ignore = self.retransmit_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
         let _ignore = self.packet_retransmit_tx.send(PacketRetransmitTask::NewWr {

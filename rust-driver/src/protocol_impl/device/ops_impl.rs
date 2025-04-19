@@ -10,6 +10,7 @@ use qp_attr::{IbvQpAttr, IbvQpInitAttr};
 
 use crate::{
     ack_responder::AckResponder,
+    ack_timeout::QpAckTimeoutWorker,
     completion::{
         Completion, CompletionQueueTable, CompletionTask, CompletionWorker, CqManager, Event,
         PostRecvEvent,
@@ -36,7 +37,6 @@ use crate::{
         TcpChannel,
     },
     send::{SendWr, SendWrBase, SendWrRdma},
-    timeout_retransmit::TimeoutRetransmitWorker,
 };
 
 use super::{mode::Mode, DeviceAdaptor};
@@ -106,7 +106,7 @@ where
         let is_shutdown = Arc::new(AtomicBool::new(false));
         let (completion_tx, completion_rx) = flume::unbounded();
         let (ack_tx, ack_rx) = flume::unbounded();
-        let (retransmit_tx, retransmit_rx) = flume::unbounded();
+        let (ack_timeout_tx, ack_timeout_rx) = flume::unbounded();
         let (packet_retransmit_tx, packet_retransmit_rx) = flume::unbounded();
         let (rdma_write_tx, rdma_write_rx) = flume::unbounded();
         let rx_buffer = rb_allocator.alloc()?;
@@ -129,7 +129,7 @@ where
             meta_bufs,
             mode,
             ack_tx.clone(),
-            retransmit_tx.clone(),
+            ack_timeout_tx.clone(),
             packet_retransmit_tx.clone(),
             completion_tx.clone(),
             rdma_write_tx.clone(),
@@ -140,6 +140,7 @@ where
             cq_table.clone_arc(),
             qp_attr_table.clone_arc(),
             ack_tx,
+            ack_timeout_tx.clone(),
         )
         .spawn();
         cmd_controller.set_network(config.network())?;
@@ -149,14 +150,19 @@ where
         #[allow(clippy::mem_forget)]
         std::mem::forget(simple_nic_rx); // prevent libc::munmap being called
         AckResponder::new(qp_attr_table.clone_arc(), ack_rx, Box::new(simple_nic_tx)).spawn();
-        TimeoutRetransmitWorker::new(retransmit_rx, send_scheduler.clone_arc(), config.ack())
-            .spawn();
+        QpAckTimeoutWorker::new(
+            ack_timeout_rx,
+            packet_retransmit_tx.clone(),
+            send_scheduler.clone_arc(),
+            config.ack(),
+        )
+        .spawn();
         PacketRetransmitWorker::new(packet_retransmit_rx, send_scheduler.clone_arc()).spawn();
         RdmaWriteWorker::new(
             rdma_write_rx,
             qp_attr_table,
             send_scheduler,
-            retransmit_tx,
+            ack_timeout_tx,
             packet_retransmit_tx,
             completion_tx.clone(),
         )
@@ -387,7 +393,7 @@ where
             .qp_manager
             .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
-        let event = Event::PostRecv(PostRecvEvent::new(wr.wr_id));
+        let event = Event::PostRecv(PostRecvEvent::new(qpn, wr.wr_id));
         self.completion_tx
             .send(CompletionTask::Register { qpn, event });
         let tx = self

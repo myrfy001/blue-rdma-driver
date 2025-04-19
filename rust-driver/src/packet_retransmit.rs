@@ -23,6 +23,9 @@ pub(crate) enum PacketRetransmitTask {
         // Exclusive
         psn_high: Psn,
     },
+    RetransmitAll {
+        qpn: u32,
+    },
     Ack {
         qpn: u32,
         psn: Psn,
@@ -34,6 +37,7 @@ impl PacketRetransmitTask {
         match *self {
             PacketRetransmitTask::RetransmitRange { qpn, .. }
             | PacketRetransmitTask::NewWr { qpn, .. }
+            | PacketRetransmitTask::RetransmitAll { qpn }
             | PacketRetransmitTask::Ack { qpn, .. } => qpn,
         }
     }
@@ -92,6 +96,16 @@ impl PacketRetransmitWorker {
                         self.wr_sender.send(packet);
                     }
                 }
+                PacketRetransmitTask::RetransmitAll { qpn } => {
+                    let packets = sq.inner.iter().flat_map(|sqe| {
+                        WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn())
+                    });
+                    for mut packet in packets {
+                        packet.set_is_retry();
+                        self.wr_sender.send(packet);
+                    }
+                }
+
                 PacketRetransmitTask::Ack { psn, .. } => {
                     sq.pop_until(psn);
                 }

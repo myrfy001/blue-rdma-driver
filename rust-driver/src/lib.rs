@@ -171,6 +171,7 @@
 #![allow(clippy::arithmetic_side_effects)]
 
 mod ack_responder;
+mod ack_timeout;
 mod completion;
 mod config;
 /// Constants used throughout the driver
@@ -192,8 +193,6 @@ mod ringbuf;
 /// Send Queue implementations
 mod send;
 mod sq_worker;
-mod timeout_retransmit;
-mod timer;
 mod tracker;
 mod utils;
 

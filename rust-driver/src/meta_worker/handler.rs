@@ -1,26 +1,23 @@
 use crate::{
     ack_responder::AckResponse,
+    ack_timeout::AckTimeoutTask,
     completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
-    constants::PSN_MASK,
     device_protocol::{
         AckMetaLocalHw, AckMetaRemoteDriver, HeaderReadMeta, HeaderType, HeaderWriteMeta,
-        NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, PacketPos, WorkReqOpCode,
+        NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, PacketPos, ReportMeta, WorkReqOpCode,
     },
     packet_retransmit::PacketRetransmitTask,
     rdma_write_worker::RdmaWriteTask,
     send::{SendWrBase, SendWrRdma},
-    timeout_retransmit::RetransmitTask,
     tracker::{LocalAckTracker, RemoteAckTracker},
     utils::{Psn, QpTable},
 };
-
-use super::ReportMeta;
 
 pub(crate) struct MetaHandler {
     pub(super) send_table: QpTable<RemoteAckTracker>,
     pub(super) recv_table: QpTable<LocalAckTracker>,
     pub(super) ack_tx: flume::Sender<AckResponse>,
-    pub(super) retransmit_tx: flume::Sender<RetransmitTask>,
+    pub(super) ack_timeout_tx: flume::Sender<AckTimeoutTask>,
     pub(super) packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
     pub(super) completion_tx: flume::Sender<CompletionTask>,
     pub(super) rdma_write_tx: flume::Sender<RdmaWriteTask>,
@@ -29,7 +26,7 @@ pub(crate) struct MetaHandler {
 impl MetaHandler {
     pub(crate) fn new(
         ack_tx: flume::Sender<AckResponse>,
-        retransmit_tx: flume::Sender<RetransmitTask>,
+        ack_timeout_tx: flume::Sender<AckTimeoutTask>,
         packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
         completion_tx: flume::Sender<CompletionTask>,
         rdma_write_tx: flume::Sender<RdmaWriteTask>,
@@ -38,7 +35,7 @@ impl MetaHandler {
             send_table: QpTable::new(),
             recv_table: QpTable::new(),
             ack_tx,
-            retransmit_tx,
+            ack_timeout_tx,
             packet_retransmit_tx,
             completion_tx,
             rdma_write_tx,
@@ -46,6 +43,7 @@ impl MetaHandler {
     }
 
     pub(super) fn handle_meta(&mut self, meta: ReportMeta) -> Option<()> {
+        self.update_ack_timer(&meta);
         match meta {
             ReportMeta::HeaderWrite(x) => self.handle_header_write(x),
             ReportMeta::HeaderRead(x) => self.handle_header_read(x),
@@ -56,6 +54,12 @@ impl MetaHandler {
             ReportMeta::NakRemoteDriver(x) => self.handle_nak_remote_driver(x),
             ReportMeta::Cnp { .. } => todo!(),
         }
+    }
+
+    fn update_ack_timer(&self, meta: &ReportMeta) {
+        let _ignore = self
+            .ack_timeout_tx
+            .send(AckTimeoutTask::recv_meta(meta.qpn()));
     }
 
     fn handle_ack_local_hw(&mut self, meta: AckMetaLocalHw) -> Option<()> {
@@ -153,6 +157,7 @@ impl MetaHandler {
         if meta.ack_req {
             let end_psn = meta.psn + 1;
             let event = Event::Recv(RecvEvent::new(
+                meta.dqpn,
                 RecvEventOp::RecvRead,
                 MessageMeta::new(meta.msn, end_psn),
                 true,
@@ -214,6 +219,7 @@ impl MetaHandler {
             match header_type {
                 HeaderType::Write => {
                     let event = Event::Recv(RecvEvent::new(
+                        meta.dqpn,
                         RecvEventOp::Write,
                         MessageMeta::new(msn, end_psn),
                         ack_req,
@@ -224,6 +230,7 @@ impl MetaHandler {
                 }
                 HeaderType::WriteWithImm => {
                     let event = Event::Recv(RecvEvent::new(
+                        meta.dqpn,
                         RecvEventOp::WriteWithImm { imm },
                         MessageMeta::new(msn, end_psn),
                         ack_req,
@@ -234,6 +241,7 @@ impl MetaHandler {
                 }
                 HeaderType::Send => {
                     let event = Event::Recv(RecvEvent::new(
+                        meta.dqpn,
                         RecvEventOp::Recv,
                         MessageMeta::new(msn, end_psn),
                         ack_req,
@@ -244,6 +252,7 @@ impl MetaHandler {
                 }
                 HeaderType::SendWithImm => {
                     let event = Event::Recv(RecvEvent::new(
+                        meta.dqpn,
                         RecvEventOp::RecvWithImm { imm },
                         MessageMeta::new(msn, end_psn),
                         ack_req,
@@ -254,6 +263,7 @@ impl MetaHandler {
                 }
                 HeaderType::ReadResp => {
                     let event = Event::Recv(RecvEvent::new(
+                        meta.dqpn,
                         RecvEventOp::ReadResp,
                         MessageMeta::new(msn, end_psn),
                         ack_req,

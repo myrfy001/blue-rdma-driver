@@ -131,6 +131,21 @@ pub(crate) enum ReportMeta {
     Cnp(CnpMeta),
 }
 
+impl ReportMeta {
+    pub(crate) fn qpn(&self) -> u32 {
+        match *self {
+            ReportMeta::HeaderWrite(x) => x.dqpn,
+            ReportMeta::HeaderRead(x) => x.dqpn,
+            ReportMeta::AckLocalHw(x) => x.qpn,
+            ReportMeta::AckRemoteDriver(x) => x.qpn,
+            ReportMeta::NakLocalHw(x) => x.qpn,
+            ReportMeta::NakRemoteHw(x) => x.qpn,
+            ReportMeta::NakRemoteDriver(x) => x.qpn,
+            ReportMeta::Cnp(x) => x.qpn,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct HeaderWriteMeta {
     pub(crate) pos: PacketPos,

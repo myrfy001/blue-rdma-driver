@@ -1,14 +1,15 @@
 use std::{collections::VecDeque, iter, ops::ControlFlow, sync::Arc};
 
 use bitvec::vec::BitVec;
+use log::trace;
 use parking_lot::Mutex;
 
 use crate::{
     ack_responder::AckResponse,
+    ack_timeout::AckTimeoutTask,
     constants::MAX_CQ_CNT,
     qp::QueuePairAttrTable,
-    utils::Msn,
-    utils::{Psn, QpTable},
+    utils::{Msn, Psn, QpTable},
 };
 
 struct EventRegister {
@@ -55,6 +56,7 @@ pub(crate) struct CompletionWorker {
     cq_table: CompletionQueueTable,
     qp_table: QueuePairAttrTable,
     ack_resp_tx: flume::Sender<AckResponse>,
+    ack_timeout_tx: flume::Sender<AckTimeoutTask>,
 }
 
 impl CompletionWorker {
@@ -63,6 +65,7 @@ impl CompletionWorker {
         cq_table: CompletionQueueTable,
         qp_table: QueuePairAttrTable,
         ack_resp_tx: flume::Sender<AckResponse>,
+        ack_timeout_tx: flume::Sender<AckTimeoutTask>,
     ) -> Self {
         Self {
             completion_rx,
@@ -70,6 +73,7 @@ impl CompletionWorker {
             cq_table,
             qp_table,
             ack_resp_tx,
+            ack_timeout_tx,
         }
     }
 
@@ -99,13 +103,20 @@ impl CompletionWorker {
                 }
                 CompletionTask::AckSend { base_psn, .. } => {
                     if let Some(send_cq) = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                        tracker.ack_send(Some(base_psn), send_cq);
+                        tracker.ack_send(Some(base_psn), send_cq, &self.ack_timeout_tx);
                     }
                 }
                 CompletionTask::AckRecv { base_psn, .. } => {
                     let send_cq = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h));
                     if let Some(recv_cq) = qp_attr.recv_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                        tracker.ack_recv(base_psn, recv_cq, send_cq, qpn, &self.ack_resp_tx);
+                        tracker.ack_recv(
+                            base_psn,
+                            recv_cq,
+                            send_cq,
+                            qpn,
+                            &self.ack_resp_tx,
+                            &self.ack_timeout_tx,
+                        );
                     }
                 }
             }
@@ -157,11 +168,17 @@ impl QueuePairMessageTracker {
         }
     }
 
-    fn ack_send(&mut self, psn: Option<Psn>, send_cq: &CompletionQueue) {
+    fn ack_send(
+        &mut self,
+        psn: Option<Psn>,
+        send_cq: &CompletionQueue,
+        ack_timeout_tx: &flume::Sender<AckTimeoutTask>,
+    ) {
         if let Some(psn) = psn {
             self.send.ack(psn);
         }
         while let Some(event) = self.send.peek() {
+            trace!("ack send event: {event:?}");
             match event.op {
                 SendEventOp::WriteSignaled | SendEventOp::SendSignaled => {
                     let x = self.send.pop().unwrap_or_else(|| unreachable!());
@@ -170,6 +187,7 @@ impl QueuePairMessageTracker {
                         SendEventOp::SendSignaled => Completion::Send { wr_id: x.wr_id },
                         SendEventOp::ReadSignaled => unreachable!(),
                     };
+                    ack_timeout_tx.send(AckTimeoutTask::ack(x.qpn));
                     send_cq.push_back(completion);
                 }
                 SendEventOp::ReadSignaled => {
@@ -192,6 +210,7 @@ impl QueuePairMessageTracker {
         send_cq: Option<&CompletionQueue>,
         qpn: u32,
         ack_resp_tx: &flume::Sender<AckResponse>,
+        ack_timeout_tx: &flume::Sender<AckTimeoutTask>,
     ) {
         self.recv.ack(psn);
         while let Some(event) = self.recv.pop() {
@@ -226,7 +245,7 @@ impl QueuePairMessageTracker {
                     self.read_resp_queue.push_back(event);
                     // check if the read  completion could be updated
                     if let Some(cq) = send_cq {
-                        self.ack_send(None, cq);
+                        self.ack_send(None, cq, ack_timeout_tx);
                     }
                 }
                 RecvEventOp::RecvRead | RecvEventOp::Write => {}
@@ -307,14 +326,20 @@ pub(crate) enum Event {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct SendEvent {
+    qpn: u32,
     op: SendEventOp,
     meta: MessageMeta,
     wr_id: u64,
 }
 
 impl SendEvent {
-    pub(crate) fn new(op: SendEventOp, meta: MessageMeta, wr_id: u64) -> Self {
-        Self { op, meta, wr_id }
+    pub(crate) fn new(qpn: u32, op: SendEventOp, meta: MessageMeta, wr_id: u64) -> Self {
+        Self {
+            qpn,
+            op,
+            meta,
+            wr_id,
+        }
     }
 }
 
@@ -334,14 +359,20 @@ pub(crate) enum SendEventOp {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RecvEvent {
+    qpn: u32,
     op: RecvEventOp,
     meta: MessageMeta,
     ack_req: bool,
 }
 
 impl RecvEvent {
-    pub(crate) fn new(op: RecvEventOp, meta: MessageMeta, ack_req: bool) -> Self {
-        Self { op, meta, ack_req }
+    pub(crate) fn new(qpn: u32, op: RecvEventOp, meta: MessageMeta, ack_req: bool) -> Self {
+        Self {
+            qpn,
+            op,
+            meta,
+            ack_req,
+        }
     }
 }
 
@@ -363,12 +394,13 @@ pub(crate) enum RecvEventOp {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct PostRecvEvent {
+    qpn: u32,
     wr_id: u64,
 }
 
 impl PostRecvEvent {
-    pub(crate) fn new(wr_id: u64) -> Self {
-        Self { wr_id }
+    pub(crate) fn new(qpn: u32, wr_id: u64) -> Self {
+        Self { qpn, wr_id }
     }
 }
 

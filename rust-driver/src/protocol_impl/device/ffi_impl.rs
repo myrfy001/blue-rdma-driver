@@ -3,6 +3,7 @@ use std::{io, net::Ipv4Addr, ptr};
 use ipnetwork::{IpNetwork, Ipv4Network};
 
 use crate::{
+    ack_timeout::AckTimeoutConfig,
     completion::Completion,
     config::{ConfigLoader, DeviceConfig},
     ctx_ops::RdmaCtxOps,
@@ -13,7 +14,6 @@ use crate::{
     net::config::{MacAddress, NetworkConfig},
     recv::RecvWr,
     send::SendWr,
-    timeout_retransmit::AckTimeoutConfig,
 };
 
 use super::{

@@ -109,12 +109,40 @@ pub(crate) struct QpTable<T> {
 }
 
 impl<T> QpTable<T> {
+    pub(crate) fn new_with<F: FnMut() -> T>(f: F) -> Self {
+        Self {
+            inner: iter::repeat_with(f).take(MAX_QP_CNT).collect(),
+        }
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        self.inner.iter()
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.inner.iter_mut()
+    }
+
     pub(crate) fn get_qp(&self, qpn: u32) -> Option<&T> {
         self.inner.get(qpn_index(qpn))
     }
 
     pub(crate) fn get_qp_mut(&mut self, qpn: u32) -> Option<&mut T> {
         self.inner.get_mut(qpn_index(qpn))
+    }
+
+    pub(crate) fn map_qp<R, F>(&self, qpn: u32, f: F) -> Option<R>
+    where
+        F: FnMut(&T) -> R,
+    {
+        self.inner.get(qpn_index(qpn)).map(f)
+    }
+
+    pub(crate) fn map_qp_mut<R, F>(&mut self, qpn: u32, f: F) -> Option<R>
+    where
+        F: FnMut(&mut T) -> R,
+    {
+        self.inner.get_mut(qpn_index(qpn)).map(f)
     }
 
     pub(crate) fn replace(&mut self, qpn: u32, mut t: T) -> Option<T> {
@@ -176,9 +204,7 @@ impl<T: Default> QpTable<T> {
 
 impl<T: Default> Default for QpTable<T> {
     fn default() -> Self {
-        Self {
-            inner: iter::repeat_with(T::default).take(MAX_QP_CNT).collect(),
-        }
+        Self::new_with(T::default)
     }
 }
 

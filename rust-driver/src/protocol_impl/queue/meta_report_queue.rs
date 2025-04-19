@@ -5,27 +5,23 @@ use std::{
 
 use crate::{
     ack_responder::AckResponse,
+    ack_timeout::AckTimeoutTask,
     completion::CompletionTask,
-    mem::{
-        virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
-        DmaBuf, PageWithPhysAddr,
-    },
+    mem::DmaBuf,
     meta_worker::{MetaHandler, MetaWorker},
     packet_retransmit::PacketRetransmitTask,
     protocol_impl::{
         desc::{
             MetaReportQueueAckDesc, MetaReportQueueAckExtraDesc, MetaReportQueueDescFirst,
             MetaReportQueueDescNext, MetaReportQueuePacketBasicInfoDesc,
-            MetaReportQueueReadReqExtendInfoDesc, RingBufDescUntyped,
+            MetaReportQueueReadReqExtendInfoDesc,
         },
         device::{
             mode::Mode, proxy::build_meta_report_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor,
         },
         MetaReportQueueCtx, MetaReportQueueHandler,
     },
-    qp::QueuePairAttrTable,
     rdma_write_worker::RdmaWriteTask,
-    timeout_retransmit::RetransmitTask,
 };
 
 use super::DescRingBuffer;
@@ -109,7 +105,7 @@ pub(crate) fn init_and_spawn_meta_worker<Dev>(
     pages: Vec<DmaBuf>,
     mode: Mode,
     ack_tx: flume::Sender<AckResponse>,
-    retransmit_tx: flume::Sender<RetransmitTask>,
+    retransmit_tx: flume::Sender<AckTimeoutTask>,
     packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
     completion_tx: flume::Sender<CompletionTask>,
     rdma_write_tx: flume::Sender<RdmaWriteTask>,

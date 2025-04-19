@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{net::config::NetworkConfig, timeout_retransmit::AckTimeoutConfig};
+use crate::{ack_timeout::AckTimeoutConfig, net::config::NetworkConfig};
 
 const DEFAULT_CONFIG_PATH: &str = "/etc/bluerdma/config.toml";
 
