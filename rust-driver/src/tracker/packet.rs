@@ -5,13 +5,6 @@ use crate::{
     utils::Psn,
 };
 
-#[derive(Debug)]
-pub(crate) enum AckOneResult {
-    Ok,
-    Advanced(Psn),
-    Duplicate,
-}
-
 #[derive(Default, Debug, Clone)]
 pub(crate) struct PsnTracker {
     base_psn: Psn,
@@ -71,21 +64,13 @@ impl PsnTracker {
     ///
     /// Returns `Some(PSN)` if the left edge of the PSN window is advanced, where the
     /// returned `PSN` is the new base PSN value after the advance.
-    pub(crate) fn ack_one(&mut self, psn: Psn) -> AckOneResult {
-        let Some(rstart) = usize::try_from(self.rstart(psn)).ok() else {
-            return AckOneResult::Duplicate;
-        };
-        if *self.inner.get(rstart).as_deref().unwrap_or(&false) {
-            return AckOneResult::Duplicate;
-        }
+    pub(crate) fn ack_one(&mut self, psn: Psn) -> Option<Psn> {
+        let rstart: usize = usize::try_from(self.rstart(psn)).ok()?;
         if rstart >= self.inner.len() {
             self.inner.resize(rstart + 1, false);
         }
         self.inner.set(rstart, true);
-        match self.try_advance() {
-            Some(psn) => AckOneResult::Advanced(psn),
-            None => AckOneResult::Ok,
-        }
+        self.try_advance()
     }
 
     /// Acknowledges all PSNs before the given PSN.

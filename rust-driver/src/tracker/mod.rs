@@ -1,7 +1,5 @@
 mod packet;
 
-pub(crate) use packet::AckOneResult;
-
 use packet::PsnTracker;
 
 use crate::utils::Psn;
@@ -13,7 +11,7 @@ pub(crate) struct LocalAckTracker {
 }
 
 impl LocalAckTracker {
-    pub(crate) fn ack_one(&mut self, psn: Psn) -> AckOneResult {
+    pub(crate) fn ack_one(&mut self, psn: Psn) -> Option<Psn> {
         self.psn_tracker.ack_one(psn)
     }
 
