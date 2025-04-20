@@ -13,7 +13,7 @@ pub(crate) enum ConfigError {
     ParseError(#[from] toml::de::Error),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub(crate) struct DeviceConfig {
     pub(crate) network: NetworkConfig,
     pub(crate) ack: AckTimeoutConfig,

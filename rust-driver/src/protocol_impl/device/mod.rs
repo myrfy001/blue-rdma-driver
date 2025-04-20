@@ -8,6 +8,8 @@ pub(crate) mod hardware;
 /// Emulated device adaptor
 pub(crate) mod emulated;
 
+pub(crate) mod mock;
+
 /// CSR proxy types
 pub(crate) mod proxy;
 

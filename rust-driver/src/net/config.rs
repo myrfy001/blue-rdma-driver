@@ -20,7 +20,7 @@ pub trait NetworkResolver: Send + Sync + 'static {
 }
 
 /// MAC address represented as 6 bytes
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct MacAddress(pub [u8; 6]);
 
@@ -110,6 +110,16 @@ pub struct NetworkConfig {
     pub gateway: IpAddr,
     /// MAC address
     pub mac: MacAddress,
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            ip: Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0).unwrap(),
+            gateway: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
+            mac: MacAddress::default(),
+        }
+    }
 }
 
 /// Network mode configuration - either static or DHCP

@@ -19,6 +19,7 @@ use crate::{
 use super::{
     emulated::EmulatedDevice,
     hardware::PciHwDevice,
+    mock::{MockDeviceCtx, MockHwDevice},
     ops_impl::{
         qp_attr::{IbvQpAttr, IbvQpInitAttr},
         DeviceOps, HwDevice, HwDeviceCtx,
@@ -94,6 +95,11 @@ impl BlueRdmaCore {
         // (check_duration, local_ack_timeout) : (256ms, 1s) because emulator is slow
         HwDeviceCtx::initialize(device, config)
     }
+
+    #[allow(clippy::unnecessary_wraps)]
+    fn new_mock(sysfs_name: &str) -> io::Result<MockHwDevice> {
+        Ok(MockHwDevice)
+    }
 }
 
 pub(crate) struct EmulatedHwDevice {
@@ -136,18 +142,23 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
     fn init() {}
 
     #[inline]
-    #[allow(clippy::unwrap_used)]
-    #[allow(clippy::as_conversions)] // usize to u64
     fn new(sysfs_name: *const std::ffi::c_char) -> *mut std::ffi::c_void {
         let name = unsafe {
             std::ffi::CStr::from_ptr(sysfs_name)
                 .to_string_lossy()
                 .into_owned()
         };
-        let Ok(ctx) = BlueRdmaCore::new_hw(&name) else {
-            return ptr::null_mut();
-        };
-        Box::into_raw(Box::new(ctx)).cast()
+        #[cfg(feature = "hw")]
+        let ctx = BlueRdmaCore::new_hw(&name);
+        #[cfg(feature = "sim")]
+        let ctx = BlueRdmaCore::new_emulated(&name);
+        #[cfg(feature = "mock")]
+        let ctx = BlueRdmaCore::new_mock(&name);
+
+        match ctx {
+            Err(err) => ptr::null_mut(),
+            Ok(ctx) => Box::into_raw(Box::new(ctx)).cast(),
+        }
     }
 
     #[inline]
@@ -363,7 +374,7 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
         let bluerdma = unsafe { get_device(mr.context) };
         if bluerdma.dereg_mr(mr.handle).is_err() {
             return libc::EINVAL;
-        };
+        }
 
         0
     }
@@ -453,15 +464,22 @@ struct BlueRdmaDevice {
 }
 
 #[allow(unsafe_code)]
-unsafe fn get_device(
-    context: *mut ibverbs_sys::ibv_context,
-) -> &'static mut HwDeviceCtx<PciHwDevice> {
+unsafe fn get_device(context: *mut ibverbs_sys::ibv_context) -> &'static mut dyn DeviceOps {
     let dev_ptr = unsafe { *context }.device.cast::<BlueRdmaDevice>();
+    let driver_ptr = unsafe { (*dev_ptr).driver };
     unsafe {
-        (*dev_ptr)
-            .driver
-            .cast::<HwDeviceCtx<PciHwDevice>>()
-            .as_mut()
+        #[cfg(feature = "hw")]
+        {
+            driver_ptr.cast::<HwDeviceCtx<PciHwDevice>>().as_mut()
+        }
+        #[cfg(feature = "sim")]
+        {
+            driver_ptr.cast::<HwDeviceCtx<EmulatedHwDevice>>().as_mut()
+        }
+        #[cfg(feature = "mock")]
+        {
+            driver_ptr.cast::<MockDeviceCtx>().as_mut()
+        }
     }
     .unwrap_or_else(|| unreachable!("null device pointer"))
 }
