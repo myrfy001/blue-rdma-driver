@@ -183,7 +183,7 @@ void printZeroRanges(char *dst_buffer, int msg_len) {
 }
 
 int main(int argc, char *argv[]) {
-  if (argc < 4) {
+  if (argc < 2) {
     printf("Usage: %s <msg_len>\n", argv[0]);
     return 1;
   }
