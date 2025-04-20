@@ -224,6 +224,7 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
                 port_cap_flags: 0x0000_2c00,
                 max_msg_sz: 1 << 31,
                 lid: 1,
+                link_layer: ibverbs_sys::IBV_LINK_LAYER_ETHERNET as u8,
                 ..Default::default()
             };
         }
