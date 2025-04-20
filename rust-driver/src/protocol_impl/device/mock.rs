@@ -31,7 +31,20 @@ pub(crate) struct MockDmaBufAllocator;
 
 impl DmaBufAllocator for MockDmaBufAllocator {
     fn alloc(&mut self, len: usize) -> io::Result<DmaBuf> {
-        let mmap = MmapMut::new(std::ptr::null_mut(), 0);
+        const LEN: usize = 4096 * 32;
+        #[allow(unsafe_code)]
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                LEN,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED | libc::MAP_ANON,
+                -1,
+                0,
+            )
+        };
+
+        let mmap = MmapMut::new(ptr, usize::MAX);
         Ok(DmaBuf::new(mmap, 0))
     }
 }
