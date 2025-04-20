@@ -1,4 +1,10 @@
-use std::io;
+use std::{
+    collections::{HashMap, VecDeque},
+    io,
+};
+
+use bitvec::store::BitStore;
+use tracing::info;
 
 use crate::{
     completion::Completion,
@@ -6,6 +12,8 @@ use crate::{
         page::MmapMut, virt_to_phy::AddressResolver, DmaBuf, DmaBufAllocator, MemoryPinner,
         UmemHandler,
     },
+    recv::RecvWr,
+    send::SendWr,
 };
 
 use super::{
@@ -93,43 +101,102 @@ impl HwDevice for MockHwDevice {
     }
 }
 
-pub(crate) struct MockDeviceCtx;
+pub(crate) struct MockDeviceCtx {
+    mr_key: u32,
+    qpn: u32,
+    cq_handle: u32,
+    cq_table: HashMap<u32, VecDeque<Completion>>,
+    send_qp_cq_map: HashMap<u32, u32>,
+    recv_qp_cq_map: HashMap<u32, u32>,
+}
 
 impl DeviceOps for MockDeviceCtx {
     fn reg_mr(&mut self, addr: u64, length: usize, pd_handle: u32, access: u8) -> io::Result<u32> {
-        Ok(0)
+        self.mr_key += 1;
+        info!("mock reg mr");
+        Ok(self.mr_key)
     }
 
     fn dereg_mr(&mut self, mr_key: u32) -> io::Result<()> {
+        info!("mock dereg mr");
         Ok(())
     }
 
     fn create_qp(&mut self, attr: super::ops_impl::qp_attr::IbvQpInitAttr) -> io::Result<u32> {
-        Ok(0)
+        self.qpn += 1;
+        if let Some(h) = attr.send_cq() {
+            let _ignore = self.send_qp_cq_map.insert(self.qpn, h);
+        }
+        if let Some(h) = attr.send_cq() {
+            let _ignore = self.recv_qp_cq_map.insert(self.qpn, h);
+        }
+        info!("mock create qp: {}", self.qpn);
+
+        Ok(self.qpn)
     }
 
     fn update_qp(&mut self, qpn: u32, attr: super::ops_impl::qp_attr::IbvQpAttr) -> io::Result<()> {
+        info!("mock update qp");
         Ok(())
     }
 
-    fn destroy_qp(&mut self, qpn: u32) {}
+    fn destroy_qp(&mut self, qpn: u32) {
+        info!("mock destroy qp");
+    }
 
     fn create_cq(&mut self) -> Option<u32> {
-        Some(0)
+        self.cq_handle += 1;
+        info!("mock create cq, handle: {}", self.cq_handle);
+        Some(self.cq_handle)
     }
 
-    fn destroy_cq(&mut self, handle: u32) {}
+    fn destroy_cq(&mut self, handle: u32) {
+        info!("mock destroy cq, handle: {handle}");
+    }
 
     fn poll_cq(&mut self, handle: u32, max_num_entries: usize) -> Vec<Completion> {
-        let comp = Completion::Send { wr_id: 0 };
-        vec![comp]
+        let completions = if let Some(cq) = self.cq_table.get_mut(&handle) {
+            cq.pop_front().into_iter().collect()
+        } else {
+            vec![]
+        };
+        info!("completions: {completions:?}");
+        completions
     }
 
-    fn post_send(&mut self, qpn: u32, wr: crate::send::SendWr) -> io::Result<()> {
+    fn post_send(&mut self, qpn: u32, wr: SendWr) -> io::Result<()> {
+        if wr.send_flags() & ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0 != 0 {
+            let completion = match wr {
+                SendWr::Rdma(_) => Completion::RdmaWrite { wr_id: wr.wr_id() },
+                SendWr::Send(_) => Completion::Send { wr_id: wr.wr_id() },
+            };
+            if let Some(cq) = self
+                .send_qp_cq_map
+                .get_mut(&qpn)
+                .and_then(|h| self.cq_table.get_mut(h))
+            {
+                cq.push_back(completion);
+            }
+        }
+        info!("post send wr: {wr:?}");
+
         Ok(())
     }
 
-    fn post_recv(&mut self, qpn: u32, wr: crate::recv::RecvWr) -> io::Result<()> {
+    fn post_recv(&mut self, qpn: u32, wr: RecvWr) -> io::Result<()> {
+        let completion = Completion::Recv {
+            wr_id: wr.wr_id,
+            imm: None,
+        };
+        if let Some(cq) = self
+            .send_qp_cq_map
+            .get_mut(&qpn)
+            .and_then(|h| self.cq_table.get_mut(h))
+        {
+            cq.push_back(completion);
+        }
+        info!("post recv wr: {wr:?}");
+
         Ok(())
     }
 }
