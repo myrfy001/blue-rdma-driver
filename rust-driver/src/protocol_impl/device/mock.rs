@@ -4,7 +4,7 @@ use std::{
 };
 
 use bitvec::store::BitStore;
-use tracing::info;
+use log::info;
 
 use crate::{
     completion::Completion,

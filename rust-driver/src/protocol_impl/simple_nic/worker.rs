@@ -7,7 +7,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use tracing::error;
+use log::error;
 
 use crate::{
     device_protocol::{FrameRx, FrameTx},
@@ -274,13 +274,13 @@ impl<Rx: FrameRx + Send + 'static> RxWorker<Rx> {
                             continue;
                         }
                         Err(err) => {
-                            tracing::error!("Rx processing error: {err}");
+                            log::error!("Rx processing error: {err}");
                             return Err(err);
                         }
                     };
 
                     if let Err(err) = self.dev.send(&frame) {
-                        tracing::error!("Rx processing error: {err}");
+                        log::error!("Rx processing error: {err}");
                         return Err(err);
                     }
                 }

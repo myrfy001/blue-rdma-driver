@@ -12,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-use tracing::error;
+use log::error;
 
 use crate::{
     ack_responder::AckResponse,

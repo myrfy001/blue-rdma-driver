@@ -10,7 +10,7 @@ use pnet::{
     },
     util::MacAddr,
 };
-use tracing::error;
+use log::error;
 
 use crate::{constants::PSN_MASK, device_protocol::FrameTx, qp::QueuePairAttrTable, utils::Psn};
 

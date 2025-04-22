@@ -42,9 +42,7 @@ pub struct BlueRdmaCore;
 
 impl BlueRdmaCore {
     fn init_logger() {
-        let _ignore = tracing_subscriber::fmt()
-            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-            .try_init();
+        let _ignore = env_logger::try_init();
     }
 
     #[allow(clippy::unwrap_used, clippy::unwrap_in_result)]

@@ -1,7 +1,7 @@
 use std::{io, iter, thread, time::Duration};
 
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use log::error;
 
 use crate::{
     constants::MAX_QP_CNT,

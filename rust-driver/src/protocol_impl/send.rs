@@ -1,7 +1,7 @@
 use std::{io, iter, sync::Arc, time::Duration};
 
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
-use tracing::error;
+use log::error;
 
 use crate::{
     device_protocol::{WorkReqSend, WrChunk},

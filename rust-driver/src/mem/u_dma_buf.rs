@@ -6,8 +6,6 @@ use std::{
     ptr,
 };
 
-use tracing_subscriber::Layer;
-
 use super::{
     page::{ContiguousPages, MmapMut, PageAllocator},
     DmaBuf, DmaBufAllocator, PageWithPhysAddr,

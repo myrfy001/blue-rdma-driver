@@ -1,6 +1,6 @@
 use std::io;
 
-use tracing::error;
+use log::error;
 
 use crate::{
     constants::PSN_MASK,
