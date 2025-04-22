@@ -128,7 +128,7 @@ impl DeviceOps for MockDeviceCtx {
         if let Some(h) = attr.send_cq() {
             let _ignore = self.send_qp_cq_map.insert(self.qpn, h);
         }
-        if let Some(h) = attr.send_cq() {
+        if let Some(h) = attr.recv_cq() {
             let _ignore = self.recv_qp_cq_map.insert(self.qpn, h);
         }
         info!("mock create qp: {}", self.qpn);
@@ -147,6 +147,7 @@ impl DeviceOps for MockDeviceCtx {
 
     fn create_cq(&mut self) -> Option<u32> {
         self.cq_handle += 1;
+        let _ignore = self.cq_table.insert(self.cq_handle, VecDeque::new());
         info!("mock create cq, handle: {}", self.cq_handle);
         Some(self.cq_handle)
     }
@@ -190,7 +191,7 @@ impl DeviceOps for MockDeviceCtx {
             imm: None,
         };
         if let Some(cq) = self
-            .send_qp_cq_map
+            .recv_qp_cq_map
             .get_mut(&qpn)
             .and_then(|h| self.cq_table.get_mut(h))
         {
