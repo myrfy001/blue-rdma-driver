@@ -95,8 +95,8 @@ impl BlueRdmaCore {
     }
 
     #[allow(clippy::unnecessary_wraps)]
-    fn new_mock(sysfs_name: &str) -> io::Result<MockHwDevice> {
-        Ok(MockHwDevice)
+    fn new_mock(sysfs_name: &str) -> io::Result<MockDeviceCtx> {
+        Ok(MockDeviceCtx::default())
     }
 }
 

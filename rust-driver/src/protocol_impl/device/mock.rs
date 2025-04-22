@@ -101,6 +101,7 @@ impl HwDevice for MockHwDevice {
     }
 }
 
+#[derive(Default)]
 pub(crate) struct MockDeviceCtx {
     mr_key: u32,
     qpn: u32,
