@@ -209,3 +209,4 @@ pub use protocol_impl::test_csr_rw::TestDevice;
 pub use protocol_impl::SimpleNicDeviceConfig;
 
 pub mod bench_wrappers;
+pub mod test_wrapper;
