@@ -6,12 +6,13 @@ use std::{
     thread,
 };
 
+use bincode::{Decode, Encode};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::{utils::qpn_index, utils::QpTable};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub(crate) struct RecvWr {
     pub(crate) wr_id: u64,
     pub(crate) addr: u64,

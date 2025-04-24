@@ -120,7 +120,6 @@
     // The followings are selected restriction lints from rust 1.68.0 to 1.71.0
     // clippy::allow_attributes, still unstable
     clippy::impl_trait_in_params,
-    clippy::let_underscore_untyped,
     clippy::missing_assert_message,
     clippy::semicolon_inside_block,
     // clippy::semicolon_outside_block, already used `semicolon_inside_block`

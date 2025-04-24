@@ -48,6 +48,7 @@ buddy_system_allocator = "0.11.0"
 ctor = "0.4.1"
 env_logger = "0.11.8"
 log = "0.4.27"
+bincode = "2.0.1"
 
 [dev-dependencies]
 criterion = "0.5.1"

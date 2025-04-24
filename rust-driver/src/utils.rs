@@ -140,7 +140,7 @@ impl<T> QpTable<T> {
 
     pub(crate) fn map_qp_mut<R, F>(&mut self, qpn: u32, f: F) -> Option<R>
     where
-        F: FnMut(&mut T) -> R,
+        F: FnOnce(&mut T) -> R,
     {
         self.inner.get_mut(qpn_index(qpn)).map(f)
     }

@@ -21,6 +21,7 @@
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             rustToolchain
+            cargo-nextest
 
             rdma-core
             cmake

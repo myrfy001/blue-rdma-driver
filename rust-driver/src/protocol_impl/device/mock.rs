@@ -1,23 +1,45 @@
+#![allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::unwrap_in_result,
+    unsafe_code,
+    clippy::too_many_lines,
+    clippy::wildcard_enum_match_arm
+)]
+
 use std::{
-    collections::{HashMap, VecDeque},
-    io,
+    collections::{HashMap, HashSet, VecDeque},
+    io::{self, BufReader, Read, Write},
+    net::{Ipv4Addr, TcpListener, TcpStream},
+    ptr,
+    sync::Arc,
+    thread,
 };
 
+use bincode::{Decode, Encode};
 use bitvec::store::BitStore;
 use log::info;
+use parking_lot::Mutex;
+use rand::random;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     completion::Completion,
+    device_protocol::WorkReqOpCode,
     mem::{
         page::MmapMut, virt_to_phy::AddressResolver, DmaBuf, DmaBufAllocator, MemoryPinner,
         UmemHandler,
     },
     recv::RecvWr,
     send::SendWr,
+    utils::{qpn_index, QpTable},
 };
 
 use super::{
-    ops_impl::{DeviceOps, HwDevice},
+    ops_impl::{
+        qp_attr::{IbvQpAttr, IbvQpInitAttr},
+        DeviceOps, HwDevice,
+    },
     DeviceAdaptor,
 };
 
@@ -43,7 +65,7 @@ impl DmaBufAllocator for MockDmaBufAllocator {
         #[allow(unsafe_code)]
         let ptr = unsafe {
             libc::mmap(
-                std::ptr::null_mut(),
+                ptr::null_mut(),
                 LEN,
                 libc::PROT_READ | libc::PROT_WRITE,
                 libc::MAP_SHARED | libc::MAP_ANON,
@@ -101,14 +123,41 @@ impl HwDevice for MockHwDevice {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
+struct QpCtx {
+    dpq_ip: Option<Ipv4Addr>,
+    dpqn: Option<u32>,
+    conn: Option<QpConnetion>,
+}
+
+impl QpCtx {
+    fn conn(&self) -> &QpConnetion {
+        self.conn.as_ref().unwrap()
+    }
+}
+
+#[derive(Debug, Default)]
 pub(crate) struct MockDeviceCtx {
     mr_key: u32,
-    qpn: u32,
     cq_handle: u32,
-    cq_table: HashMap<u32, VecDeque<Completion>>,
+    self_ip: u32,
+    cq_table: HashMap<u32, CompletionQueue>,
     send_qp_cq_map: HashMap<u32, u32>,
     recv_qp_cq_map: HashMap<u32, u32>,
+    qp_ctx_table: QpTable<QpCtx>,
+    qp_local_task_tx: Option<flume::Sender<LocalTask>>,
+    qpn_set: HashSet<u32>,
+}
+
+impl MockDeviceCtx {
+    fn rand_qpn(&mut self) -> u32 {
+        loop {
+            let qpn = random::<u32>() % 10000;
+            if !self.qpn_set.insert(qpn) {
+                break qpn;
+            }
+        }
+    }
 }
 
 impl DeviceOps for MockDeviceCtx {
@@ -123,21 +172,142 @@ impl DeviceOps for MockDeviceCtx {
         Ok(())
     }
 
-    fn create_qp(&mut self, attr: super::ops_impl::qp_attr::IbvQpInitAttr) -> io::Result<u32> {
-        self.qpn += 1;
+    fn create_qp(&mut self, attr: IbvQpInitAttr) -> io::Result<u32> {
+        let qpn = self.rand_qpn();
         if let Some(h) = attr.send_cq() {
-            let _ignore = self.send_qp_cq_map.insert(self.qpn, h);
+            let _ignore = self.send_qp_cq_map.insert(qpn, h);
         }
         if let Some(h) = attr.recv_cq() {
-            let _ignore = self.recv_qp_cq_map.insert(self.qpn, h);
+            let _ignore = self.recv_qp_cq_map.insert(qpn, h);
         }
-        info!("mock create qp: {}", self.qpn);
+        let send_cq = attr.send_cq().and_then(|h| self.cq_table.get(&h)).cloned();
+        let recv_cq = attr.recv_cq().and_then(|h| self.cq_table.get(&h)).cloned();
 
-        Ok(self.qpn)
+        let conn = QpConnetion::new(self.self_ip.into(), qpn);
+        let conn_c = conn.clone();
+        let (tx, rx) = flume::unbounded::<LocalTask>();
+        _ = self.qp_local_task_tx.replace(tx);
+        let mut recv_reqs = VecDeque::new();
+        _ = thread::spawn(move || loop {
+            for task in rx.try_iter() {
+                match task {
+                    LocalTask::PostRecv(req) => {
+                        recv_reqs.push_back(req);
+                    }
+                }
+            }
+            let msg = conn_c.recv::<QpTransportMessage>();
+            match msg {
+                // Requests
+                QpTransportMessage::WriteReq(RdmaWriteReq {
+                    raddr,
+                    imm,
+                    data,
+                    wr_id,
+                    ack_req,
+                }) => {
+                    write_local_addr(raddr, &data);
+                    let resp = WriteOrSendResp { wr_id, ack_req };
+                    conn_c.send(QpTransportMessage::WriteResp(resp));
+                }
+                QpTransportMessage::WriteWithImmReq(RdmaWriteReq {
+                    raddr,
+                    imm,
+                    data,
+                    wr_id,
+                    ack_req,
+                }) => {
+                    write_local_addr(raddr, &data);
+                    if let Some(x) = recv_cq.as_ref() {
+                        x.push(Completion::RecvRdmaWithImm { imm });
+                    }
+                    let resp = WriteOrSendResp { wr_id, ack_req };
+                    conn_c.send(QpTransportMessage::WriteResp(resp));
+                }
+                QpTransportMessage::SendReq(SendReq {
+                    wr_id,
+                    data,
+                    imm,
+                    ack_req,
+                }) => {
+                    let req = recv_reqs.pop_front().unwrap();
+                    write_local_addr(req.wr.addr, &data);
+                    if let Some(x) = recv_cq.as_ref() {
+                        x.push(Completion::Recv { wr_id, imm });
+                    }
+                    let resp = WriteOrSendResp { wr_id, ack_req };
+                    conn_c.send(QpTransportMessage::WriteResp(resp));
+                }
+                QpTransportMessage::ReadReq(x) => {
+                    let data = read_local_addr(x.raddr, x.len as usize);
+                    let resp = RdmaReadResp {
+                        laddr: x.laddr,
+                        raddr: x.raddr,
+                        ack_req: x.ack_req,
+                        wr_id: x.wr_id,
+                        data,
+                    };
+                    conn_c.send(QpTransportMessage::ReadResp(resp));
+                }
+
+                // Responses
+                QpTransportMessage::WriteResp(WriteOrSendResp { wr_id, ack_req })
+                | QpTransportMessage::WriteWithImmResp(WriteOrSendResp { wr_id, ack_req })
+                    if ack_req =>
+                {
+                    if let Some(x) = send_cq.as_ref() {
+                        x.push(Completion::RdmaWrite { wr_id });
+                    }
+                }
+                QpTransportMessage::SendResp(WriteOrSendResp { wr_id, ack_req }) if ack_req => {
+                    if let Some(x) = send_cq.as_ref() {
+                        x.push(Completion::Send { wr_id });
+                    }
+                }
+                QpTransportMessage::ReadResp(RdmaReadResp {
+                    laddr,
+                    raddr,
+                    data,
+                    ack_req,
+                    wr_id,
+                }) => {
+                    write_local_addr(laddr, &data);
+                    if ack_req {
+                        if let Some(x) = recv_cq.as_ref() {
+                            x.push(Completion::RdmaRead { wr_id });
+                        }
+                    }
+                }
+                QpTransportMessage::WriteResp(_)
+                | QpTransportMessage::WriteWithImmResp(_)
+                | QpTransportMessage::SendResp(_) => {}
+            }
+        });
+        _ = self.qp_ctx_table.map_qp_mut(qpn, move |ctx| {
+            ctx.conn = Some(conn);
+        });
+
+        info!("mock create qp: {qpn}");
+
+        Ok(qpn)
     }
 
-    fn update_qp(&mut self, qpn: u32, attr: super::ops_impl::qp_attr::IbvQpAttr) -> io::Result<()> {
+    fn update_qp(&mut self, qpn: u32, attr: IbvQpAttr) -> io::Result<()> {
+        // FIXME: use actual addr
+        let dqp_ip = attr.dest_qp_ip().unwrap_or(Ipv4Addr::new(0, 0, 0, 0));
+        let dqpn = attr.dest_qp_num();
+        _ = self.qp_ctx_table.map_qp_mut(qpn, |ctx| {
+            if dqpn.is_some() {
+                ctx.dpqn = dqpn;
+            }
+            ctx.dpq_ip = Some(dqp_ip);
+            if let Some((dqpn, dqp_ip)) = ctx.dpqn.zip(ctx.dpq_ip) {
+                ctx.conn().connect(dqpn, dqp_ip);
+            }
+        });
+
         info!("mock update qp");
+
         Ok(())
     }
 
@@ -147,7 +317,7 @@ impl DeviceOps for MockDeviceCtx {
 
     fn create_cq(&mut self) -> Option<u32> {
         self.cq_handle += 1;
-        let _ignore = self.cq_table.insert(self.cq_handle, VecDeque::new());
+        let _ignore = self.cq_table.insert(self.cq_handle, CompletionQueue::new());
         info!("mock create cq, handle: {}", self.cq_handle);
         Some(self.cq_handle)
     }
@@ -158,7 +328,7 @@ impl DeviceOps for MockDeviceCtx {
 
     fn poll_cq(&mut self, handle: u32, max_num_entries: usize) -> Vec<Completion> {
         let completions = if let Some(cq) = self.cq_table.get_mut(&handle) {
-            cq.pop_front().into_iter().collect()
+            cq.pop().into_iter().collect()
         } else {
             vec![]
         };
@@ -167,19 +337,52 @@ impl DeviceOps for MockDeviceCtx {
     }
 
     fn post_send(&mut self, qpn: u32, wr: SendWr) -> io::Result<()> {
-        if wr.send_flags() & ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0 != 0 {
-            let completion = match wr {
-                SendWr::Rdma(_) => Completion::RdmaWrite { wr_id: wr.wr_id() },
-                SendWr::Send(_) => Completion::Send { wr_id: wr.wr_id() },
-            };
-            if let Some(cq) = self
-                .send_qp_cq_map
-                .get_mut(&qpn)
-                .and_then(|h| self.cq_table.get_mut(h))
-            {
-                cq.push_back(completion);
+        let ack_req = wr.send_flags() & ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0 != 0;
+        let to_send = match wr {
+            SendWr::Rdma(x) => match x.opcode() {
+                WorkReqOpCode::RdmaWrite => {
+                    let data = read_local_addr(x.laddr(), x.length() as usize);
+                    QpTransportMessage::WriteReq(RdmaWriteReq {
+                        raddr: x.raddr(),
+                        imm: x.imm(),
+                        wr_id: x.wr_id(),
+                        data,
+                        ack_req,
+                    })
+                }
+                WorkReqOpCode::RdmaWriteWithImm => {
+                    let data = read_local_addr(x.laddr(), x.length() as usize);
+                    QpTransportMessage::WriteWithImmReq(RdmaWriteReq {
+                        raddr: x.raddr(),
+                        imm: x.imm(),
+                        wr_id: x.wr_id(),
+                        data,
+                        ack_req,
+                    })
+                }
+                WorkReqOpCode::RdmaRead => QpTransportMessage::ReadReq(RdmaReadReq {
+                    raddr: x.raddr(),
+                    wr_id: x.wr_id(),
+                    ack_req,
+                    laddr: x.laddr(),
+                    len: x.length(),
+                }),
+                _ => unreachable!(),
+            },
+            SendWr::Send(x) => {
+                let data = read_local_addr(x.laddr, x.length as usize);
+                QpTransportMessage::SendReq(SendReq {
+                    data,
+                    wr_id: wr.wr_id(),
+                    imm: (wr.imm_data() != 0).then_some(wr.imm_data()),
+                    ack_req,
+                })
             }
-        }
+        };
+        _ = self
+            .qp_ctx_table
+            .map_qp_mut(qpn, |ctx| ctx.conn().send(to_send));
+
         info!("post send wr: {wr:?}");
 
         Ok(())
@@ -190,15 +393,435 @@ impl DeviceOps for MockDeviceCtx {
             wr_id: wr.wr_id,
             imm: None,
         };
+        self.qp_local_task_tx
+            .as_ref()
+            .unwrap()
+            .send(LocalTask::PostRecv(PostRecvReq { wr }));
         if let Some(cq) = self
             .recv_qp_cq_map
             .get_mut(&qpn)
             .and_then(|h| self.cq_table.get_mut(h))
         {
-            cq.push_back(completion);
+            cq.push(completion);
         }
         info!("post recv wr: {wr:?}");
 
         Ok(())
+    }
+}
+
+fn read_local_addr(addr: u64, len: usize) -> Vec<u8> {
+    let mut data = vec![0u8; len];
+    let slice = unsafe { std::slice::from_raw_parts(addr as *const u8, len) };
+    data.copy_from_slice(slice);
+    data
+}
+
+fn write_local_addr(addr: u64, data: &[u8]) {
+    unsafe {
+        ptr::copy_nonoverlapping(data.as_ptr(), addr as *mut u8, data.len());
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CompletionQueue {
+    inner: Arc<Mutex<VecDeque<Completion>>>,
+}
+
+impl CompletionQueue {
+    fn new() -> Self {
+        CompletionQueue {
+            inner: Arc::new(Mutex::new(VecDeque::new())),
+        }
+    }
+
+    fn push(&self, completion: Completion) {
+        self.inner.lock().push_back(completion);
+    }
+
+    fn pop(&self) -> Option<Completion> {
+        self.inner.lock().pop_front()
+    }
+}
+
+enum LocalTask {
+    PostRecv(PostRecvReq),
+}
+
+struct PostRecvReq {
+    wr: RecvWr,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+struct RdmaWriteReq {
+    raddr: u64,
+    imm: u32,
+    data: Vec<u8>,
+    wr_id: u64,
+    ack_req: bool,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+struct RdmaReadReq {
+    laddr: u64,
+    raddr: u64,
+    len: u32,
+    ack_req: bool,
+    wr_id: u64,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+struct RdmaReadResp {
+    laddr: u64,
+    raddr: u64,
+    data: Vec<u8>,
+    wr_id: u64,
+    ack_req: bool,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+struct WriteOrSendResp {
+    wr_id: u64,
+    ack_req: bool,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+struct SendReq {
+    wr_id: u64,
+    data: Vec<u8>,
+    imm: Option<u32>,
+    ack_req: bool,
+}
+
+#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+enum QpTransportMessage {
+    WriteReq(RdmaWriteReq),
+    WriteWithImmReq(RdmaWriteReq),
+    ReadReq(RdmaReadReq),
+    SendReq(SendReq),
+
+    WriteResp(WriteOrSendResp),
+    WriteWithImmResp(WriteOrSendResp),
+    ReadResp(RdmaReadResp),
+    SendResp(WriteOrSendResp),
+}
+
+fn get_port(qpn: u32) -> u16 {
+    PORT_START_ADDR + qpn as u16
+}
+
+#[derive(Debug, Clone)]
+struct QpConnetion {
+    inner: Arc<Inner>,
+}
+
+impl QpConnetion {
+    fn new(self_ip: Ipv4Addr, qpn: u32) -> Self {
+        let inner = Inner::new(self_ip, qpn);
+        Self {
+            inner: Arc::new(inner),
+        }
+    }
+
+    fn connect(&self, qpn: u32, addr: Ipv4Addr) {
+        self.inner.connect(addr, qpn);
+    }
+
+    fn send<T: Encode>(&self, data: T) {
+        self.inner.send(data);
+    }
+
+    fn recv<T: Decode<()>>(&self) -> T {
+        self.inner.recv()
+    }
+}
+
+const PORT_START_ADDR: u16 = 10000;
+
+#[derive(Debug)]
+struct Inner {
+    listener: Mutex<TcpListener>,
+    rx_chan: Mutex<Option<BufReader<TcpStream>>>,
+    tx_chan: Mutex<Option<TcpStream>>,
+    addr: Mutex<Option<(Ipv4Addr, u16)>>,
+}
+
+impl Inner {
+    fn new(ip: Ipv4Addr, qpn: u32) -> Self {
+        log::info!("device binding to {}:{}", ip, Self::get_port(qpn));
+        let rx_chan = TcpListener::bind((ip, Self::get_port(qpn))).expect("failed to bind to addr");
+        Self {
+            listener: Mutex::new(rx_chan),
+            rx_chan: Mutex::default(),
+            tx_chan: Mutex::default(),
+            addr: Mutex::default(),
+        }
+    }
+
+    fn connect(&self, addr: Ipv4Addr, qpn: u32) {
+        _ = self.addr.lock().replace((addr, Self::get_port(qpn)));
+    }
+
+    fn get_port(qpn: u32) -> u16 {
+        PORT_START_ADDR + qpn as u16
+    }
+
+    fn send<T: Encode>(&self, data: T) {
+        if self.tx_chan.lock().is_none() {
+            let addr = self.addr.lock().unwrap();
+            let tx_chan = TcpStream::connect(addr).unwrap();
+            _ = self.tx_chan.lock().replace(tx_chan);
+        }
+        let mut tx_l = self.tx_chan.lock();
+        let tx = tx_l.as_mut().unwrap();
+        tx.write_all(&bincode::encode_to_vec(data, bincode::config::standard()).unwrap())
+            .unwrap();
+    }
+
+    fn recv<T: Decode<()>>(&self) -> T {
+        if self.rx_chan.lock().is_none() {
+            let (stream, _socket_addr) = self.listener.lock().accept().unwrap();
+            _ = self.rx_chan.lock().replace(BufReader::new(stream));
+        }
+        let mut rx_l = self.rx_chan.lock();
+        let rx = rx_l.as_mut().unwrap();
+        bincode::decode_from_reader(rx, bincode::config::standard()).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::device_protocol::WorkReqOpCode;
+    use crate::send::{SendWrBase, SendWrRdma};
+
+    use super::*;
+    use bincode::{Decode, Encode};
+    use serde::{Deserialize, Serialize};
+    use std::net::Ipv4Addr;
+    use std::thread;
+    use std::time::Duration;
+
+    #[derive(Encode, Decode, Debug, PartialEq, Serialize, Deserialize)]
+    struct TestMessage {
+        id: u32,
+        content: String,
+    }
+
+    #[test]
+    fn test_tcp_channel() {
+        let qpn0 = 10;
+        let qpn1 = 11;
+        let mut server = Inner::new(Ipv4Addr::LOCALHOST, qpn0);
+        server.connect(Ipv4Addr::LOCALHOST, qpn1);
+
+        thread::spawn(move || {
+            let mut client = Inner::new(Ipv4Addr::LOCALHOST, qpn1);
+            client.connect(Ipv4Addr::LOCALHOST, qpn0);
+            let msg = TestMessage {
+                id: 1,
+                content: "foo".into(),
+            };
+            client.send(msg);
+        });
+
+        let received: TestMessage = server.recv();
+        assert_eq!(
+            received,
+            TestMessage {
+                id: 1,
+                content: "foo".into()
+            }
+        );
+    }
+
+    struct Ctx {
+        dev: MockDeviceCtx,
+        cq: u32,
+        qpn: u32,
+        ip: Ipv4Addr,
+    }
+
+    fn create_dev(ip: Ipv4Addr) -> Ctx {
+        let mut dev = MockDeviceCtx::default();
+        dev.self_ip = ip.to_bits();
+        let cq = dev.create_cq().unwrap();
+        let mut attr_init = IbvQpInitAttr::new_rc();
+        attr_init.send_cq = Some(cq);
+        attr_init.recv_cq = Some(cq);
+        let qpn = dev.create_qp(attr_init).unwrap();
+        Ctx { dev, cq, qpn, ip }
+    }
+
+    fn handshake(x: &mut Ctx, y: &Ctx) {
+        let mut attr = IbvQpAttr::default();
+        attr.dest_qp_num = Some(y.qpn);
+        attr.dest_qp_ip = Some(y.ip);
+        x.dev.update_qp(x.qpn, attr).unwrap();
+    }
+
+    #[test]
+    fn rdma_write_basic() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+        let wr_base = SendWrBase::new(
+            0,
+            0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::RdmaWrite,
+        );
+        let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+    }
+
+    #[test]
+    fn rdma_write_with_completion() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+        let wr_base = SendWrBase::new(
+            0,
+            ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::RdmaWriteWithImm,
+        );
+        let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+    }
+
+    #[test]
+    fn rdma_read() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([0u8; 128]);
+        let buf1 = Box::new([1u8; 128]);
+        let wr_base = SendWrBase::new(
+            0,
+            0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::RdmaRead,
+        );
+        let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf0.iter().all(|x| *x == 1));
+    }
+
+    #[test]
+    fn rdma_read_with_completion() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([0u8; 128]);
+        let buf1 = Box::new([1u8; 128]);
+        let wr_base = SendWrBase::new(
+            0,
+            ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::RdmaRead,
+        );
+        let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf0.iter().all(|x| *x == 1));
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+    }
+
+    #[test]
+    fn send_recv() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+
+        let recv_wr = RecvWr {
+            wr_id: 0,
+            addr: buf1.as_ptr() as u64,
+            length: buf1.len() as u32,
+            lkey: 0,
+        };
+        dev1.dev.post_recv(dev1.qpn, recv_wr);
+
+        let wr = SendWrBase::new(
+            0,
+            0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::Send,
+        );
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+    }
+
+    #[test]
+    fn send_recv_with_completion() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+
+        let recv_wr = RecvWr {
+            wr_id: 0,
+            addr: buf1.as_ptr() as u64,
+            length: buf1.len() as u32,
+            lkey: 0,
+        };
+        dev1.dev.post_recv(dev1.qpn, recv_wr);
+
+        let wr = SendWrBase::new(
+            0,
+            ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::Send,
+        );
+        dev0.dev.post_send(dev0.qpn, wr.into());
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
     }
 }

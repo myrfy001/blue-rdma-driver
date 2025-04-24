@@ -1,5 +1,6 @@
 use crate::device_protocol::WorkReqOpCode;
 
+use bincode::{Decode, Encode};
 use ibverbs_sys::{
     ibv_send_wr,
     ibv_wr_opcode::{
@@ -7,6 +8,7 @@ use ibverbs_sys::{
         IBV_WR_SEND_WITH_IMM,
     },
 };
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Copy)]
@@ -99,6 +101,18 @@ impl SendWr {
             SendWr::Rdma(wr) => wr.base.imm_data,
             SendWr::Send(wr) => wr.imm_data,
         }
+    }
+}
+
+impl From<SendWrRdma> for SendWr {
+    fn from(wr: SendWrRdma) -> Self {
+        SendWr::Rdma(wr)
+    }
+}
+
+impl From<SendWrBase> for SendWr {
+    fn from(wr: SendWrBase) -> Self {
+        SendWr::Send(wr)
     }
 }
 
