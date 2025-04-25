@@ -34,11 +34,11 @@ use super::{
 /// Controller of the command queue
 pub(crate) struct CommandController<Dev> {
     /// Command queue pair
-    cmd_qp: Mutex<CmdQp>,
+    pub(crate) cmd_qp: Mutex<CmdQp>,
     /// Proxy for accessing command queue CSRs
-    req_csr_proxy: CmdQueueCsrProxy<Dev>,
+    pub(crate) req_csr_proxy: CmdQueueCsrProxy<Dev>,
     /// Proxy for accessing command response queue CSRs
-    resp_csr_proxy: CmdRespQueueCsrProxy<Dev>,
+    pub(crate) resp_csr_proxy: CmdRespQueueCsrProxy<Dev>,
 }
 
 impl<Dev: DeviceAdaptor> CommandController<Dev> {
@@ -94,6 +94,13 @@ impl<Dev: DeviceAdaptor> CommandController<Dev> {
     /// Flush cmd response queue pointer to device
     pub(crate) fn flush_resp_queue(&self, resp_queue: &CmdRespQueue) -> io::Result<()> {
         self.resp_csr_proxy.write_tail(resp_queue.tail())
+    }
+
+    pub(crate) fn print_resp_info(&self) {
+        let q = self.cmd_qp.lock();
+        if let Ok(head) = self.resp_csr_proxy.read_head() {
+            log::info!("resp head: {}, tail: {}", head, q.resp_queue.tail());
+        }
     }
 }
 
@@ -191,7 +198,7 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandController<Dev> {
 }
 
 /// Command queue pair
-struct CmdQp {
+pub(crate) struct CmdQp {
     /// The command request queue
     req_queue: CmdQueue,
     /// The command response queue
@@ -208,7 +215,7 @@ impl CmdQp {
     }
 
     /// Creates a queue pair update handle to process commands
-    fn update(&mut self) -> QpUpdate<'_> {
+    pub(crate) fn update(&mut self) -> QpUpdate<'_> {
         QpUpdate {
             num: 0,
             req_queue: &mut self.req_queue,
@@ -218,7 +225,7 @@ impl CmdQp {
 }
 
 /// An updates handle
-struct QpUpdate<'a> {
+pub(crate) struct QpUpdate<'a> {
     /// Number of updates
     num: usize,
     /// The command request queue
@@ -229,22 +236,23 @@ struct QpUpdate<'a> {
 
 impl QpUpdate<'_> {
     /// Pushes a new command queue descriptor to the queue.
-    fn push(&mut self, desc: CmdQueueDesc) {
+    pub(crate) fn push(&mut self, desc: CmdQueueDesc) {
         self.num = self.num.wrapping_add(1);
         //FIXME: handle failed condition
         let _ignore = self.req_queue.push(desc);
     }
 
     /// Flushes the command queue by writing the head pointer to the CSR proxy.
-    fn flush<Dev: DeviceAdaptor>(&mut self, req_csr_proxy: &CmdQueueCsrProxy<Dev>) {
+    pub(crate) fn flush<Dev: DeviceAdaptor>(&mut self, req_csr_proxy: &CmdQueueCsrProxy<Dev>) {
         req_csr_proxy.write_head(self.req_queue.head());
         if let Ok(tail_ptr) = req_csr_proxy.read_tail() {
+            log::info!("req head: {}, tail: {}", self.req_queue.head(), tail_ptr);
             self.req_queue.set_tail(tail_ptr);
         }
     }
 
     /// Waits for responses to all pushed commands.
-    fn wait<Dev: DeviceAdaptor>(mut self, resp_csr_proxy: &CmdRespQueueCsrProxy<Dev>) {
+    pub(crate) fn wait<Dev: DeviceAdaptor>(mut self, resp_csr_proxy: &CmdRespQueueCsrProxy<Dev>) {
         while self.num != 0 {
             if let Some(resp) = self.resp_queue.try_pop() {
                 self.num = self.num.wrapping_sub(1);

@@ -9,6 +9,7 @@ pub(crate) mod queue;
 mod send;
 mod simple_nic;
 pub(crate) mod test_csr_rw;
+pub(crate) mod test_wrapper;
 
 pub(crate) use cmd::*;
 pub(crate) use meta_report::*;

@@ -207,6 +207,7 @@ pub mod net;
 
 pub use protocol_impl::device::ffi_impl::BlueRdmaCore;
 pub use protocol_impl::test_csr_rw::TestDevice;
+pub use protocol_impl::test_wrapper::run_test_rb;
 pub use protocol_impl::SimpleNicDeviceConfig;
 
 pub mod bench_wrappers;
