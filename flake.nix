@@ -16,6 +16,11 @@
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "rust-analyzer" ];
         };
+        dtld-rdma-core = pkgs.rdma-core.overrideAttrs (old: {
+          src = ./dtld-ibverbs;
+          sourceRoot = "dtld-ibverbs/rdma-core-55.0";
+        });
+
       in
       {
         devShells.default = pkgs.mkShell {
@@ -23,7 +28,7 @@
             rustToolchain
             cargo-nextest
 
-            rdma-core
+            dtld-rdma-core
             cmake
             docutils
             pandoc
