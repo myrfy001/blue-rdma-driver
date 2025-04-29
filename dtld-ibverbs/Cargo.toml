@@ -8,6 +8,7 @@ default = ["hw"]
 hw = ["blue-rdma-driver/hw", "blue-rdma-driver/page_size_2m"]
 sim = ["blue-rdma-driver/sim", "blue-rdma-driver/page_size_2m"]
 mock = ["blue-rdma-driver/mock", "blue-rdma-driver/page_size_2m"]
+debug_csrs = ["blue-rdma-driver/debug_csrs"]
 
 [lib]
 name = "bluerdma_rust"
