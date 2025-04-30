@@ -153,10 +153,25 @@ impl PciHwDevice {
 
     #[cfg(feature = "debug_csrs")]
     pub(crate) fn set_custom(&self) -> io::Result<()> {
+        use log::info;
+
         let mut cfg = CustomCsrConfigurator::new(&self.sysfs_path)?;
-        cfg.set_loopback();
-        cfg.set_drop_thresh(1);
-        cfg.set_seed(0x3131_3131);
+        if std::env::var("ENABLE_LOOPBACK").unwrap_or_default() == "1" {
+            cfg.set_loopback();
+            info!("loopback enabled");
+        }
+        let drop_thresh = std::env::var("DROP_THRESHOLD")
+            .ok()
+            .and_then(|s| s.parse::<u8>().ok())
+            .unwrap_or(1);
+        cfg.set_drop_thresh(drop_thresh);
+        info!("packet drop threshold set to: {drop_thresh}");
+        let seed = std::env::var("SEED")
+            .ok()
+            .and_then(|s| u32::from_str_radix(&s, 16).ok())
+            .unwrap_or(0x3131_3131);
+        cfg.set_seed(seed);
+        info!("packet drop rng seed set to: {seed}");
 
         Ok(())
     }
