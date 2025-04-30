@@ -51,6 +51,7 @@ clean:
 
 install:
 	@echo "Loading kernel modules... (Requires root privileges)"
+	modprobe ib_core
 	insmod $(BUILD_DIR)/$(BLUERDMA_KO)
 	insmod $(BUILD_DIR)/$(UDMABUF_KO) $(UDMABUF_PARAMS)
 	@echo "Modules loaded."
