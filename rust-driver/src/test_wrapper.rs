@@ -41,6 +41,7 @@ pub fn test_full_rb() -> io::Result<()> {
         CommandController::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?).unwrap();
     let network_config = NetworkConfig {
         ip: Ipv4Network::new("10.0.0.2".parse().unwrap(), 24).unwrap(),
+        peer_ip: "10.0.0.1".parse().unwrap(),
         gateway: "10.0.0.1".parse().unwrap(),
         mac: MacAddress([1; 6]),
     };
@@ -88,4 +89,3 @@ pub fn test_full_rb() -> io::Result<()> {
 
     Ok(())
 }
-

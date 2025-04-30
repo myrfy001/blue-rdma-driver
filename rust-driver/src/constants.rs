@@ -18,3 +18,7 @@ pub(crate) const MAX_CQ_CNT: usize = 1024;
 
 /// Maximum number of outstanding send work requests (WRs) that can be posted to a Queue Pair (QP).
 pub(crate) const MAX_SEND_WR: usize = 0x8000;
+
+// TODO: replace this with real device IP
+pub(crate) const CARD_IP_ADDRESS: u32 = 0x1122_330A;
+pub(crate) const CARD_MAC_ADDRESS: u64 = 0xAABB_CCDD_EE0A;

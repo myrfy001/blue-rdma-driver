@@ -6,6 +6,7 @@ use crate::{
     ack_timeout::AckTimeoutConfig,
     completion::Completion,
     config::{ConfigLoader, DeviceConfig},
+    constants::CARD_IP_ADDRESS,
     ctx_ops::RdmaCtxOps,
     mem::{
         page::EmulatedPageAllocator, sim_alloc, virt_to_phy::PhysAddrResolverEmulated,
@@ -26,8 +27,6 @@ use super::{
     },
 };
 
-const CARD_MAC_ADDRESS: u64 = 0xAABB_CCDD_EE0A;
-const CARD_IP_ADDRESS: u32 = 0x1122_330A;
 const POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 const POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 2);
 
@@ -85,6 +84,7 @@ impl BlueRdmaCore {
 
         let network = NetworkConfig {
             ip: Ipv4Network::new(Ipv4Addr::from_bits(CARD_IP_ADDRESS), 24).unwrap(),
+            peer_ip: Ipv4Addr::from_bits(CARD_IP_ADDRESS),
             gateway: Ipv4Addr::new(127, 0, 0, 1).into(),
             mac: MacAddress([0x0A, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA]),
         };

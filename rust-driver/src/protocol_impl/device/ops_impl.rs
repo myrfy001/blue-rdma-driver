@@ -16,6 +16,7 @@ use crate::{
         PostRecvEvent,
     },
     config::DeviceConfig,
+    constants::{CARD_IP_ADDRESS, CARD_MAC_ADDRESS},
     device_protocol::{
         DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp,
     },
@@ -297,8 +298,8 @@ where
             current.pmtu = ibverbs_sys::IBV_MTU_4096 as u8;
         });
         let entry = UpdateQp {
-            ip_addr: self.network_config().ip.ip().to_bits(),
-            peer_mac_addr: self.network_config().mac.into(),
+            ip_addr: CARD_IP_ADDRESS,
+            peer_mac_addr: CARD_MAC_ADDRESS,
             local_udp_port: 0x100,
             qp_type: attr.qp_type(),
             qpn,
@@ -315,9 +316,9 @@ where
             .update_qp(qpn, |current| {
                 let entry = UpdateQp {
                     qpn,
-                    ip_addr: self.network_config().ip.ip().to_bits(),
+                    ip_addr: CARD_IP_ADDRESS,
                     local_udp_port: 0x100,
-                    peer_mac_addr: self.network_config().mac.into(),
+                    peer_mac_addr: CARD_MAC_ADDRESS,
                     qp_type: current.qp_type,
                     peer_qpn: attr.dest_qp_num().unwrap_or(current.dqpn),
                     rq_access_flags: attr
@@ -328,7 +329,7 @@ where
                 current.dqpn = entry.peer_qpn;
                 current.access_flags = entry.rq_access_flags;
                 current.pmtu = entry.pmtu;
-                current.dqp_ip = attr.dest_qp_ip().map_or(0, Ipv4Addr::to_bits);
+                current.dqp_ip = CARD_IP_ADDRESS;
                 entry
             })
             .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
@@ -343,7 +344,7 @@ where
             let dqp_ip = Ipv4Addr::from_bits(qp.dqp_ip);
             let (tx, rx) = post_recv_channel::<TcpChannel>(
                 self.network_config().ip.ip(),
-                dqp_ip,
+                self.network_config().peer_ip,
                 qpn,
                 qp.dqpn,
             )?;

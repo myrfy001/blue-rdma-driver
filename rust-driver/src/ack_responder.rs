@@ -1,6 +1,7 @@
 use std::net::Ipv4Addr;
 
 use bilge::prelude::*;
+use log::error;
 use pnet::{
     packet::{
         ethernet::{EtherTypes, MutableEthernetPacket},
@@ -10,9 +11,13 @@ use pnet::{
     },
     util::MacAddr,
 };
-use log::error;
 
-use crate::{constants::PSN_MASK, device_protocol::FrameTx, qp::QueuePairAttrTable, utils::Psn};
+use crate::{
+    constants::{CARD_IP_ADDRESS, PSN_MASK},
+    device_protocol::FrameTx,
+    qp::QueuePairAttrTable,
+    utils::Psn,
+};
 
 #[derive(Debug)]
 pub(crate) enum AckResponse {
@@ -139,7 +144,6 @@ impl AckFrameBuilder {
     }
 
     fn build_ethernet_frame(src_mac: MacAddr, dst_mac: MacAddr, payload: &[u8]) -> Vec<u8> {
-        const CARD_IP_ADDRESS: u32 = 0x1122_330A;
         const UDP_PORT: u16 = 4791;
         const ETH_HEADER_LEN: usize = 14;
         const IP_HEADER_LEN: usize = 20;

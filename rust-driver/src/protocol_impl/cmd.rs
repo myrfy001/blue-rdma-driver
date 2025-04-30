@@ -9,6 +9,7 @@ use ipnetwork::IpNetwork;
 use parking_lot::Mutex;
 
 use crate::{
+    constants::{CARD_IP_ADDRESS, CARD_MAC_ADDRESS},
     device_protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
     mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
     mtt::Mtt,
@@ -166,8 +167,8 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandController<Dev> {
             0,
             gateway.to_bits(),
             network.mask().to_bits(),
-            network.ip().to_bits(),
-            param.mac.into(),
+            CARD_IP_ADDRESS,
+            CARD_MAC_ADDRESS,
         );
         let mut qp = self.cmd_qp.lock();
         let mut update = qp.update();

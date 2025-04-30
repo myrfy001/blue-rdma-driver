@@ -106,6 +106,8 @@ impl From<u64> for MacAddress {
 pub struct NetworkConfig {
     /// IP network (address and subnet)
     pub ip: Ipv4Network,
+    /// Peer ip
+    pub peer_ip: Ipv4Addr,
     /// Gateway IP address
     pub gateway: IpAddr,
     /// MAC address
@@ -116,6 +118,7 @@ impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
             ip: Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0).unwrap(),
+            peer_ip: Ipv4Addr::new(0, 0, 0, 0),
             gateway: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             mac: MacAddress::default(),
         }
@@ -169,6 +172,7 @@ mod tests {
                 ip: Ipv4Network::new("10.0.0.2".parse().unwrap(), 24).unwrap(),
                 gateway: "10.0.0.1".parse().unwrap(),
                 mac: MacAddress([0; 6]),
+                peer_ip: "10.0.0.1".parse().unwrap(),
             })
         }
     }
