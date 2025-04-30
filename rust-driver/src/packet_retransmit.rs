@@ -97,9 +97,13 @@ impl PacketRetransmitWorker {
                     }
                 }
                 PacketRetransmitTask::RetransmitAll { qpn } => {
-                    let packets = sq.inner.iter().flat_map(|sqe| {
-                        WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn())
-                    });
+                    let packets = sq
+                        .inner
+                        .iter()
+                        .flat_map(|sqe| {
+                            WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn())
+                        })
+                        .skip_while(|x| x.psn < sq.base_psn);
                     for mut packet in packets {
                         packet.set_is_retry();
                         self.wr_sender.send(packet);
@@ -117,6 +121,7 @@ impl PacketRetransmitWorker {
 #[derive(Default)]
 pub(crate) struct IbvSendQueue {
     inner: VecDeque<SendQueueElem>,
+    base_psn: Psn,
 }
 
 impl IbvSendQueue {
@@ -127,6 +132,7 @@ impl IbvSendQueue {
     pub(crate) fn pop_until(&mut self, psn: Psn) {
         let mut a = self.inner.partition_point(|x| x.psn < psn);
         let _drop = self.inner.drain(..a.saturating_sub(1));
+        self.base_psn = psn;
     }
 
     /// Find range [`psn_low`, `psn_high`)
