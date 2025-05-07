@@ -393,21 +393,11 @@ impl DeviceOps for MockDeviceCtx {
     }
 
     fn post_recv(&mut self, qpn: u32, wr: RecvWr) -> io::Result<()> {
-        let completion = Completion::Recv {
-            wr_id: wr.wr_id,
-            imm: None,
-        };
         self.qp_local_task_tx
             .as_ref()
             .unwrap()
             .send(LocalTask::PostRecv(PostRecvReq { wr }));
-        if let Some(cq) = self
-            .recv_qp_cq_map
-            .get_mut(&qpn)
-            .and_then(|h| self.cq_table.get_mut(h))
-        {
-            cq.push(completion);
-        }
+
         info!("post recv wr: {wr:?}");
 
         Ok(())
@@ -713,6 +703,8 @@ mod tests {
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
     }
 
     #[test]
@@ -762,6 +754,7 @@ mod tests {
         thread::sleep(Duration::from_millis(1));
         assert!(buf0.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
     }
 
     #[test]
@@ -795,6 +788,7 @@ mod tests {
         thread::sleep(Duration::from_millis(1));
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
     }
 
     #[test]
@@ -829,5 +823,7 @@ mod tests {
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
     }
 }
