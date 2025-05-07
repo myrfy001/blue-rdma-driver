@@ -18,7 +18,7 @@ use std::{
 
 use bincode::{Decode, Encode};
 use bitvec::store::BitStore;
-use log::info;
+use log::{debug, info};
 use parking_lot::Mutex;
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -190,13 +190,17 @@ impl DeviceOps for MockDeviceCtx {
         let mut recv_reqs = VecDeque::new();
         _ = thread::spawn(move || loop {
             for task in rx.try_iter() {
+                debug!("recv task: {task:?}");
                 match task {
                     LocalTask::PostRecv(req) => {
                         recv_reqs.push_back(req);
                     }
                 }
             }
+
             let msg = conn_c.recv::<QpTransportMessage>();
+            debug!("recv msg from connection: {msg:?}");
+
             match msg {
                 // Requests
                 QpTransportMessage::WriteReq(RdmaWriteReq {
@@ -444,10 +448,12 @@ impl CompletionQueue {
     }
 }
 
+#[derive(Debug)]
 enum LocalTask {
     PostRecv(PostRecvReq),
 }
 
+#[derive(Debug)]
 struct PostRecvReq {
     wr: RecvWr,
 }
