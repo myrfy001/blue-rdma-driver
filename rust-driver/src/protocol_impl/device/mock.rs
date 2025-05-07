@@ -27,8 +27,9 @@ use crate::{
     completion::Completion,
     device_protocol::WorkReqOpCode,
     mem::{
-        page::MmapMut, virt_to_phy::AddressResolver, DmaBuf, DmaBufAllocator, MemoryPinner,
-        UmemHandler,
+        page::MmapMut,
+        virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
+        DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
     recv::RecvWr,
     send::SendWr,
@@ -162,8 +163,10 @@ impl MockDeviceCtx {
 
 impl DeviceOps for MockDeviceCtx {
     fn reg_mr(&mut self, addr: u64, length: usize, pd_handle: u32, access: u8) -> io::Result<u32> {
+        let addr_resolver = PhysAddrResolverLinuxX86;
+        let pa = addr_resolver.virt_to_phys(addr);
+        info!("mock reg mr, virt addr: {addr:x}, length: {length}, access: {access}, phys_addr: {pa:?}");
         self.mr_key += 1;
-        info!("mock reg mr");
         Ok(self.mr_key)
     }
 
