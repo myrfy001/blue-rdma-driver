@@ -18,7 +18,7 @@ use std::{
 
 use bincode::{Decode, Encode};
 use bitvec::store::BitStore;
-use log::{debug, info};
+use log::{debug, info, warn};
 use parking_lot::Mutex;
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -148,6 +148,7 @@ pub(crate) struct MockDeviceCtx {
     qp_ctx_table: QpTable<QpCtx>,
     qp_local_task_tx: Option<flume::Sender<LocalTask>>,
     qpn_set: HashSet<u32>,
+    mr_table: MrTable,
 }
 
 impl MockDeviceCtx {
@@ -166,6 +167,9 @@ impl DeviceOps for MockDeviceCtx {
         let addr_resolver = PhysAddrResolverLinuxX86;
         let pa = addr_resolver.virt_to_phys(addr);
         info!("mock reg mr, virt addr: {addr:x}, length: {length}, access: {access}, phys_addr: {pa:?}");
+        if pa.ok().flatten().is_some() {
+            self.mr_table.reg(Mr::new(addr, length));
+        }
         self.mr_key += 1;
         Ok(self.mr_key)
     }
@@ -191,6 +195,8 @@ impl DeviceOps for MockDeviceCtx {
         let (tx, rx) = flume::unbounded::<LocalTask>();
         _ = self.qp_local_task_tx.replace(tx);
         let mut recv_reqs = VecDeque::new();
+        let mr_table = self.mr_table.clone_arc();
+
         _ = thread::spawn(move || loop {
             for task in rx.try_iter() {
                 debug!("recv task: {task:?}");
@@ -213,7 +219,7 @@ impl DeviceOps for MockDeviceCtx {
                     wr_id,
                     ack_req,
                 }) => {
-                    write_local_addr(raddr, &data);
+                    write_local_addr(&mr_table, raddr, &data);
                     let resp = WriteOrSendResp { wr_id, ack_req };
                     conn_c.send(QpTransportMessage::WriteResp(resp));
                 }
@@ -224,7 +230,7 @@ impl DeviceOps for MockDeviceCtx {
                     wr_id,
                     ack_req,
                 }) => {
-                    write_local_addr(raddr, &data);
+                    write_local_addr(&mr_table, raddr, &data);
                     if let Some(x) = recv_cq.as_ref() {
                         x.push(Completion::RecvRdmaWithImm { imm });
                     }
@@ -238,7 +244,7 @@ impl DeviceOps for MockDeviceCtx {
                     ack_req,
                 }) => {
                     let req = recv_reqs.pop_front().unwrap();
-                    write_local_addr(req.wr.addr, &data);
+                    write_local_addr(&mr_table, req.wr.addr, &data);
                     if let Some(x) = recv_cq.as_ref() {
                         x.push(Completion::Recv { wr_id, imm });
                     }
@@ -278,7 +284,7 @@ impl DeviceOps for MockDeviceCtx {
                     ack_req,
                     wr_id,
                 }) => {
-                    write_local_addr(laddr, &data);
+                    write_local_addr(&mr_table, laddr, &data);
                     if ack_req {
                         if let Some(x) = recv_cq.as_ref() {
                             x.push(Completion::RdmaRead { wr_id });
@@ -414,9 +420,58 @@ fn read_local_addr(addr: u64, len: usize) -> Vec<u8> {
     data
 }
 
-fn write_local_addr(addr: u64, data: &[u8]) {
+#[cfg(test)]
+fn write_local_addr(table: &MrTable, addr: u64, data: &[u8]) {
     unsafe {
         ptr::copy_nonoverlapping(data.as_ptr(), addr as *mut u8, data.len());
+    }
+}
+
+#[cfg(not(test))]
+fn write_local_addr(table: &MrTable, addr: u64, data: &[u8]) {
+    if table.valid(addr, data.len()) {
+        debug!("valid mr, addr: {addr:x}, length: {}", data.len());
+        unsafe {
+            ptr::copy_nonoverlapping(data.as_ptr(), addr as *mut u8, data.len());
+        }
+    } else {
+        warn!("invalid mr, addr: {addr:x}, length: {}", data.len());
+    }
+}
+
+#[derive(Debug, Default)]
+struct MrTable {
+    inner: Arc<Mutex<Vec<Mr>>>,
+}
+
+impl MrTable {
+    fn clone_arc(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+
+    fn reg(&self, mr: Mr) {
+        self.inner.lock().push(mr);
+    }
+
+    fn valid(&self, a: u64, l: usize) -> bool {
+        let inner = self.inner.lock();
+        inner
+            .iter()
+            .any(|Mr { addr, length }| a >= *addr && (a + l as u64) < addr + *length as u64)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Mr {
+    addr: u64,
+    length: usize,
+}
+
+impl Mr {
+    fn new(addr: u64, length: usize) -> Self {
+        Self { addr, length }
     }
 }
 
