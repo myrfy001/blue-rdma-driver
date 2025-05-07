@@ -117,11 +117,21 @@ impl From<SendWrBase> for SendWr {
 }
 
 /// A resolver and validator for send work requests
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct SendWrRdma {
     base: SendWrBase,
     pub(crate) raddr: u64,
     pub(crate) rkey: u32,
+}
+
+impl std::fmt::Debug for SendWrRdma {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SendWrRdma")
+            .field("base", &self.base)
+            .field("raddr", &format_args!("{:x}", self.raddr))
+            .field("rkey", &self.rkey)
+            .finish()
+    }
 }
 
 impl SendWrRdma {
@@ -226,7 +236,7 @@ impl SendWrRdma {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub(crate) struct SendWrBase {
     pub(crate) wr_id: u64,
     pub(crate) send_flags: u32,
@@ -235,6 +245,20 @@ pub(crate) struct SendWrBase {
     pub(crate) lkey: u32,
     pub(crate) imm_data: u32,
     pub(crate) opcode: WorkReqOpCode,
+}
+
+impl std::fmt::Debug for SendWrBase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SendWrBase")
+            .field("wr_id", &self.wr_id)
+            .field("send_flags", &self.send_flags)
+            .field("laddr", &format_args!("{:x}", self.laddr))
+            .field("length", &self.length)
+            .field("lkey", &self.lkey)
+            .field("imm_data", &self.imm_data)
+            .field("opcode", &self.opcode)
+            .finish()
+    }
 }
 
 impl SendWrBase {
