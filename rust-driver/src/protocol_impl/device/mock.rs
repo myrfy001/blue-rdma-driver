@@ -10,6 +10,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     io::{self, BufReader, Read, Write},
+    iter,
     net::{Ipv4Addr, TcpListener, TcpStream},
     ptr,
     sync::Arc,
@@ -341,7 +342,11 @@ impl DeviceOps for MockDeviceCtx {
 
     fn poll_cq(&mut self, handle: u32, max_num_entries: usize) -> Vec<Completion> {
         let completions = if let Some(cq) = self.cq_table.get_mut(&handle) {
-            cq.pop().into_iter().collect()
+            iter::repeat_with(|| cq.pop())
+                .take_while(Option::is_some)
+                .take(max_num_entries)
+                .flatten()
+                .collect()
         } else {
             vec![]
         };
