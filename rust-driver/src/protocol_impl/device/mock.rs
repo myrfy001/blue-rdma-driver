@@ -208,7 +208,10 @@ impl DeviceOps for MockDeviceCtx {
                 }
             }
 
-            let msg = conn_c.recv::<QpTransportMessage>();
+            let Some(msg) = conn_c.recv::<QpTransportMessage>() else {
+                warn!("connection closed, exiting");
+                break;
+            };
             debug!("recv msg from connection: {msg:?}");
 
             match msg {
@@ -590,7 +593,7 @@ impl QpConnetion {
         self.inner.send(data);
     }
 
-    fn recv<T: Decode<()>>(&self) -> T {
+    fn recv<T: Decode<()>>(&self) -> Option<T> {
         self.inner.recv()
     }
 }
@@ -637,14 +640,14 @@ impl Inner {
             .unwrap();
     }
 
-    fn recv<T: Decode<()>>(&self) -> T {
+    fn recv<T: Decode<()>>(&self) -> Option<T> {
         if self.rx_chan.lock().is_none() {
             let (stream, _socket_addr) = self.listener.lock().accept().unwrap();
             _ = self.rx_chan.lock().replace(BufReader::new(stream));
         }
         let mut rx_l = self.rx_chan.lock();
         let rx = rx_l.as_mut().unwrap();
-        bincode::decode_from_reader(rx, bincode::config::standard()).unwrap()
+        bincode::decode_from_reader(rx, bincode::config::standard()).ok()
     }
 }
 
@@ -683,7 +686,7 @@ mod tests {
             client.send(msg);
         });
 
-        let received: TestMessage = server.recv();
+        let received: TestMessage = server.recv().unwrap();
         assert_eq!(
             received,
             TestMessage {
