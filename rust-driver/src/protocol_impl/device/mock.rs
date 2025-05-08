@@ -766,6 +766,39 @@ mod tests {
     }
 
     #[test]
+    fn rdma_write_with_completion_multi() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+        let wr_base = SendWrBase::new(
+            0,
+            ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0,
+            buf0.as_ptr() as u64,
+            buf0.len() as u32,
+            0,
+            0,
+            WorkReqOpCode::RdmaWriteWithImm,
+        );
+        const NUM_WRITES: usize = 10;
+        for _ in 0..NUM_WRITES {
+            let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
+            dev0.dev.post_send(dev0.qpn, wr.into());
+        }
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+        for _ in 0..NUM_WRITES {
+            assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+            assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        }
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
+    }
+
+    #[test]
     fn rdma_read() {
         let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
         let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
@@ -881,6 +914,51 @@ mod tests {
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
+        assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
+    }
+
+    #[test]
+    fn send_recv_with_completion_multi() {
+        let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
+        let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
+        handshake(&mut dev0, &dev1);
+        handshake(&mut dev1, &dev0);
+
+        let buf0 = Box::new([1u8; 128]);
+        let buf1 = Box::new([0u8; 128]);
+
+        const NUM_SEND_RECV: usize = 10;
+
+        for _ in 0..NUM_SEND_RECV {
+            let recv_wr = RecvWr {
+                wr_id: 0,
+                addr: buf1.as_ptr() as u64,
+                length: buf1.len() as u32,
+                lkey: 0,
+            };
+            dev1.dev.post_recv(dev1.qpn, recv_wr);
+        }
+
+        for _ in 0..NUM_SEND_RECV {
+            let wr = SendWrBase::new(
+                0,
+                ibverbs_sys::ibv_send_flags::IBV_SEND_SIGNALED.0,
+                buf0.as_ptr() as u64,
+                buf0.len() as u32,
+                0,
+                0,
+                WorkReqOpCode::Send,
+            );
+            dev0.dev.post_send(dev0.qpn, wr.into());
+        }
+        thread::sleep(Duration::from_millis(1));
+        assert!(buf1.iter().all(|x| *x == 1));
+
+        for _ in 0..NUM_SEND_RECV {
+            assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
+            assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
+        }
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 0);
     }
