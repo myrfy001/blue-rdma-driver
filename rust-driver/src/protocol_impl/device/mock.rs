@@ -9,6 +9,7 @@
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt,
     io::{self, BufReader, Read, Write},
     iter,
     net::{Ipv4Addr, TcpListener, TcpStream},
@@ -183,9 +184,11 @@ impl DeviceOps for MockDeviceCtx {
     fn create_qp(&mut self, attr: IbvQpInitAttr) -> io::Result<u32> {
         let qpn = self.rand_qpn();
         if let Some(h) = attr.send_cq() {
+            info!("set send cq: {h} for qp: {qpn}");
             let _ignore = self.send_qp_cq_map.insert(qpn, h);
         }
         if let Some(h) = attr.recv_cq() {
+            info!("set recv cq: {h} for qp: {qpn}");
             let _ignore = self.recv_qp_cq_map.insert(qpn, h);
         }
         let send_cq = attr.send_cq().and_then(|h| self.cq_table.get(&h)).cloned();
@@ -209,7 +212,7 @@ impl DeviceOps for MockDeviceCtx {
             }
 
             let Some(msg) = conn_c.recv::<QpTransportMessage>() else {
-                warn!("connection closed, exiting");
+                warn!("connection closed for qpn: {qpn}, exiting");
                 break;
             };
             debug!("recv msg from connection: {msg:?}");
@@ -236,7 +239,9 @@ impl DeviceOps for MockDeviceCtx {
                 }) => {
                     write_local_addr(&mr_table, raddr, &data);
                     if let Some(x) = recv_cq.as_ref() {
-                        x.push(Completion::RecvRdmaWithImm { imm });
+                        let completion = Completion::RecvRdmaWithImm { imm };
+                        info!("new completion, qpn: {qpn}, completion: {completion:?}");
+                        x.push(completion);
                     }
                     let resp = WriteOrSendResp { wr_id, ack_req };
                     conn_c.send(QpTransportMessage::WriteResp(resp));
@@ -250,7 +255,9 @@ impl DeviceOps for MockDeviceCtx {
                     let req = recv_reqs.pop_front().unwrap();
                     write_local_addr(&mr_table, req.wr.addr, &data);
                     if let Some(x) = recv_cq.as_ref() {
-                        x.push(Completion::Recv { wr_id, imm });
+                        let completion = Completion::Recv { wr_id, imm };
+                        info!("new completion, qpn: {qpn}, completion: {completion:?}");
+                        x.push(completion);
                     }
                     let resp = WriteOrSendResp { wr_id, ack_req };
                     conn_c.send(QpTransportMessage::WriteResp(resp));
@@ -273,12 +280,16 @@ impl DeviceOps for MockDeviceCtx {
                     if ack_req =>
                 {
                     if let Some(x) = send_cq.as_ref() {
-                        x.push(Completion::RdmaWrite { wr_id });
+                        let completion = Completion::RdmaWrite { wr_id };
+                        info!("new completion, qpn: {qpn}, completion: {completion:?}");
+                        x.push(completion);
                     }
                 }
                 QpTransportMessage::SendResp(WriteOrSendResp { wr_id, ack_req }) if ack_req => {
                     if let Some(x) = send_cq.as_ref() {
-                        x.push(Completion::Send { wr_id });
+                        let completion = Completion::Send { wr_id };
+                        info!("new completion, qpn: {qpn}, completion: {completion:?}");
+                        x.push(completion);
                     }
                 }
                 QpTransportMessage::ReadResp(RdmaReadResp {
@@ -291,7 +302,9 @@ impl DeviceOps for MockDeviceCtx {
                     write_local_addr(&mr_table, laddr, &data);
                     if ack_req {
                         if let Some(x) = recv_cq.as_ref() {
-                            x.push(Completion::RdmaRead { wr_id });
+                            let completion = Completion::RdmaRead { wr_id };
+                            info!("new completion, qpn: {qpn}, completion: {completion:?}");
+                            x.push(completion);
                         }
                     }
                 }
@@ -319,11 +332,12 @@ impl DeviceOps for MockDeviceCtx {
             }
             ctx.dpq_ip = Some(dqp_ip);
             if let Some((dqpn, dqp_ip)) = ctx.dpqn.zip(ctx.dpq_ip) {
+                info!("connect to dqpn: {dqpn}, ip: {dqp_ip}");
                 ctx.conn().connect(dqpn, dqp_ip);
             }
         });
 
-        info!("mock update qp");
+        info!("mock update qp: {qpn}, peer qp: {dqpn:?}");
 
         Ok(())
     }
@@ -354,7 +368,7 @@ impl DeviceOps for MockDeviceCtx {
             vec![]
         };
         if !completions.is_empty() {
-            info!("completions: {completions:?}");
+            info!("poll cq, cq handle: {handle}, completions: {completions:?}");
         }
         completions
     }
@@ -406,7 +420,7 @@ impl DeviceOps for MockDeviceCtx {
             .qp_ctx_table
             .map_qp_mut(qpn, |ctx| ctx.conn().send(to_send));
 
-        info!("post send wr: {wr:?}");
+        info!("post send wr: {wr:?}, qpn: {qpn}");
 
         Ok(())
     }
@@ -417,7 +431,7 @@ impl DeviceOps for MockDeviceCtx {
             .unwrap()
             .send(LocalTask::PostRecv(PostRecvReq { wr }));
 
-        info!("post recv wr: {wr:?}");
+        info!("post recv wr: {wr:?}, qpn: {qpn}");
 
         Ok(())
     }
@@ -516,13 +530,25 @@ struct PostRecvReq {
     wr: RecvWr,
 }
 
-#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 struct RdmaWriteReq {
     raddr: u64,
     imm: u32,
     data: Vec<u8>,
     wr_id: u64,
     ack_req: bool,
+}
+
+impl fmt::Debug for RdmaWriteReq {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RdmaWriteReq")
+            .field("raddr", &self.raddr)
+            .field("imm", &self.imm)
+            .field("data", &format!("<{} bytes>", self.data.len()))
+            .field("wr_id", &self.wr_id)
+            .field("ack_req", &self.ack_req)
+            .finish()
+    }
 }
 
 #[derive(Encode, Decode, Debug, Serialize, Deserialize)]
@@ -534,7 +560,7 @@ struct RdmaReadReq {
     wr_id: u64,
 }
 
-#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 struct RdmaReadResp {
     laddr: u64,
     raddr: u64,
@@ -543,18 +569,41 @@ struct RdmaReadResp {
     ack_req: bool,
 }
 
+impl fmt::Debug for RdmaReadResp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RdmaReadResp")
+            .field("laddr", &self.laddr)
+            .field("raddr", &self.raddr)
+            .field("data", &format!("<{} bytes>", self.data.len()))
+            .field("wr_id", &self.wr_id)
+            .field("ack_req", &self.ack_req)
+            .finish()
+    }
+}
+
 #[derive(Encode, Decode, Debug, Serialize, Deserialize)]
 struct WriteOrSendResp {
     wr_id: u64,
     ack_req: bool,
 }
 
-#[derive(Encode, Decode, Debug, Serialize, Deserialize)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 struct SendReq {
     wr_id: u64,
     data: Vec<u8>,
     imm: Option<u32>,
     ack_req: bool,
+}
+
+impl fmt::Debug for SendReq {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SendReq")
+            .field("wr_id", &self.wr_id)
+            .field("data", &format!("<{} bytes>", self.data.len()))
+            .field("imm", &self.imm)
+            .field("ack_req", &self.ack_req)
+            .finish()
+    }
 }
 
 #[derive(Encode, Decode, Debug, Serialize, Deserialize)]
