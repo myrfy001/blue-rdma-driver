@@ -353,7 +353,9 @@ impl DeviceOps for MockDeviceCtx {
         } else {
             vec![]
         };
-        info!("completions: {completions:?}");
+        if !completions.is_empty() {
+            info!("completions: {completions:?}");
+        }
         completions
     }
 
