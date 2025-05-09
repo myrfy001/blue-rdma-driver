@@ -754,6 +754,7 @@ impl Inner {
             let listener = self.listener.lock();
             match listener.accept() {
                 Ok((stream, _)) => {
+                    stream.set_read_timeout(Some(Duration::from_millis(1)));
                     _ = self.rx_chan.lock().replace(BufReader::new(stream));
                 }
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
