@@ -14,7 +14,10 @@ use std::{
     iter,
     net::{Ipv4Addr, TcpListener, TcpStream},
     ptr,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
     thread,
     time::Duration,
 };
@@ -132,6 +135,8 @@ struct QpCtx {
     dpq_ip: Option<Ipv4Addr>,
     dpqn: Option<u32>,
     conn: Option<QpConnetion>,
+    abort_signal: Option<Arc<AtomicBool>>,
+    handle: Option<thread::JoinHandle<()>>,
 }
 
 impl QpCtx {
@@ -201,8 +206,9 @@ impl DeviceOps for MockDeviceCtx {
         _ = self.qp_local_task_tx.replace(tx);
         let mut recv_reqs = VecDeque::new();
         let mr_table = self.mr_table.clone_arc();
-
-        _ = thread::spawn(move || loop {
+        let abort_signal = Arc::new(AtomicBool::new(false));
+        let abort_signal_c = Arc::clone(&abort_signal);
+        let handle = thread::spawn(move || loop {
             for task in rx.try_iter() {
                 debug!("recv task: {task:?}");
                 match task {
@@ -212,10 +218,14 @@ impl DeviceOps for MockDeviceCtx {
                 }
             }
 
-            let Some(msg) = conn_c.recv::<QpTransportMessage>() else {
-                warn!("connection closed for qpn: {qpn}, exiting");
+            if abort_signal.load(Ordering::Relaxed) {
                 break;
+            }
+
+            let Some(msg) = conn_c.recv::<QpTransportMessage>() else {
+                continue;
             };
+
             debug!("recv msg from connection: {msg:?}");
 
             match msg {
@@ -316,6 +326,8 @@ impl DeviceOps for MockDeviceCtx {
         });
         _ = self.qp_ctx_table.map_qp_mut(qpn, move |ctx| {
             ctx.conn = Some(conn);
+            ctx.abort_signal = Some(abort_signal_c);
+            ctx.handle = Some(handle);
         });
 
         info!("mock create qp: {qpn}");
@@ -344,7 +356,15 @@ impl DeviceOps for MockDeviceCtx {
     }
 
     fn destroy_qp(&mut self, qpn: u32) {
-        info!("mock destroy qp");
+        info!("destroying qp: {qpn}");
+        _ = self.qp_ctx_table.map_qp_mut(qpn, move |ctx| {
+            ctx.abort_signal
+                .take()
+                .unwrap()
+                .store(true, Ordering::Relaxed);
+            ctx.handle.take().unwrap().join().unwrap();
+        });
+        info!("qp: {qpn} destroyed");
     }
 
     fn create_cq(&mut self) -> Option<u32> {
@@ -732,36 +752,22 @@ impl Inner {
     fn recv<T: Decode<()>>(&self) -> Option<T> {
         if self.rx_chan.lock().is_none() {
             let listener = self.listener.lock();
-            loop {
-                match listener.accept() {
-                    Ok((stream, _)) => {
-                        _ = self.rx_chan.lock().replace(BufReader::new(stream));
-                        break;
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(1));
-                    }
-                    Err(e) => {
-                        error!("failed to accept new stream: {e}");
-                        return None;
-                    }
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    _ = self.rx_chan.lock().replace(BufReader::new(stream));
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(1));
+                    return None;
+                }
+                Err(e) => {
+                    error!("failed to accept new stream: {e}");
+                    return None;
                 }
             }
         }
         let mut rx_l = self.rx_chan.lock();
-        let x =
-            bincode::decode_from_reader(rx_l.as_mut().unwrap(), bincode::config::standard()).ok();
-        match x {
-            Some(_) => x,
-            None => {
-                let reader = rx_l.take().unwrap();
-                let mut stream = reader.into_inner();
-                let mut buf = vec![0; 128];
-                let result = stream.read(&mut buf);
-                warn!("result: {result:?}");
-                None
-            }
-        }
+        bincode::decode_from_reader(rx_l.as_mut().unwrap(), bincode::config::standard()).ok()
     }
 }
 
