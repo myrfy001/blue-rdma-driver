@@ -625,13 +625,21 @@ fn get_port(qpn: u32) -> u16 {
 
 #[derive(Debug, Clone)]
 struct QpConnetion {
+    qpn: u32,
     inner: Arc<Inner>,
+}
+
+impl Drop for QpConnetion {
+    fn drop(&mut self) {
+        info!("dropping qp connection for qpn: {}", self.qpn);
+    }
 }
 
 impl QpConnetion {
     fn new(self_ip: Ipv4Addr, qpn: u32) -> Self {
         let inner = Inner::new(self_ip, qpn);
         Self {
+            qpn,
             inner: Arc::new(inner),
         }
     }
@@ -655,8 +663,31 @@ const PORT_START_ADDR: u16 = 10000;
 struct Inner {
     listener: Mutex<TcpListener>,
     rx_chan: Mutex<Option<BufReader<TcpStream>>>,
-    tx_chan: Mutex<Option<TcpStream>>,
+    tx_chan: Mutex<Option<TxChan>>,
     addr: Mutex<Option<(Ipv4Addr, u16)>>,
+    qpn: u32,
+}
+
+#[derive(Debug)]
+struct TxChan {
+    tx_chan: TcpStream,
+    qpn: u32,
+}
+
+impl Write for TxChan {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.tx_chan.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.tx_chan.flush()
+    }
+}
+
+impl Drop for TxChan {
+    fn drop(&mut self) {
+        warn!("dropping TxChan, qpn: {}", self.qpn);
+    }
 }
 
 impl Inner {
@@ -668,6 +699,7 @@ impl Inner {
             rx_chan: Mutex::default(),
             tx_chan: Mutex::default(),
             addr: Mutex::default(),
+            qpn,
         }
     }
 
@@ -682,7 +714,11 @@ impl Inner {
     fn send<T: Encode>(&self, data: T) {
         if self.tx_chan.lock().is_none() {
             let addr = self.addr.lock().unwrap();
-            let tx_chan = TcpStream::connect(addr).unwrap();
+            let stream = TcpStream::connect(addr).unwrap();
+            let tx_chan = TxChan {
+                tx_chan: stream,
+                qpn: self.qpn,
+            };
             _ = self.tx_chan.lock().replace(tx_chan);
         }
         let mut tx_l = self.tx_chan.lock();
@@ -697,8 +733,19 @@ impl Inner {
             _ = self.rx_chan.lock().replace(BufReader::new(stream));
         }
         let mut rx_l = self.rx_chan.lock();
-        let rx = rx_l.as_mut().unwrap();
-        bincode::decode_from_reader(rx, bincode::config::standard()).ok()
+        let x =
+            bincode::decode_from_reader(rx_l.as_mut().unwrap(), bincode::config::standard()).ok();
+        match x {
+            Some(_) => x,
+            None => {
+                let reader = rx_l.take().unwrap();
+                let mut stream = reader.into_inner();
+                let mut buf = vec![0; 128];
+                let result = stream.read(&mut buf);
+                warn!("result: {result:?}");
+                None
+            }
+        }
     }
 }
 
