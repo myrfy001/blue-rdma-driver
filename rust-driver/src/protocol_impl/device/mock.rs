@@ -712,17 +712,17 @@ impl Inner {
     }
 
     fn send<T: Encode>(&self, data: T) {
-        if self.tx_chan.lock().is_none() {
+        let mut tx_chan = self.tx_chan.lock();
+        if tx_chan.is_none() {
             let addr = self.addr.lock().unwrap();
             let stream = TcpStream::connect(addr).unwrap();
-            let tx_chan = TxChan {
+            let chan = TxChan {
                 tx_chan: stream,
                 qpn: self.qpn,
             };
-            _ = self.tx_chan.lock().replace(tx_chan);
+            _ = tx_chan.replace(chan);
         }
-        let mut tx_l = self.tx_chan.lock();
-        let tx = tx_l.as_mut().unwrap();
+        let tx = tx_chan.as_mut().unwrap();
         tx.write_all(&bincode::encode_to_vec(data, bincode::config::standard()).unwrap())
             .unwrap();
     }
