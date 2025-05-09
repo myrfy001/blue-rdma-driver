@@ -16,11 +16,12 @@ use std::{
     ptr,
     sync::Arc,
     thread,
+    time::Duration,
 };
 
 use bincode::{Decode, Encode};
 use bitvec::store::BitStore;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use parking_lot::Mutex;
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -694,6 +695,7 @@ impl Inner {
     fn new(ip: Ipv4Addr, qpn: u32) -> Self {
         log::info!("device binding to {}:{}", ip, Self::get_port(qpn));
         let rx_chan = TcpListener::bind((ip, Self::get_port(qpn))).expect("failed to bind to addr");
+        rx_chan.set_nonblocking(true);
         Self {
             listener: Mutex::new(rx_chan),
             rx_chan: Mutex::default(),
@@ -729,8 +731,22 @@ impl Inner {
 
     fn recv<T: Decode<()>>(&self) -> Option<T> {
         if self.rx_chan.lock().is_none() {
-            let (stream, _socket_addr) = self.listener.lock().accept().unwrap();
-            _ = self.rx_chan.lock().replace(BufReader::new(stream));
+            let listener = self.listener.lock();
+            loop {
+                match listener.accept() {
+                    Ok((stream, _)) => {
+                        _ = self.rx_chan.lock().replace(BufReader::new(stream));
+                        break;
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(1));
+                    }
+                    Err(e) => {
+                        error!("failed to accept new stream: {e}");
+                        return None;
+                    }
+                }
+            }
         }
         let mut rx_l = self.rx_chan.lock();
         let x =
