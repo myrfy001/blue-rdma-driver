@@ -13,6 +13,7 @@ use super::{
         ffi_impl::EmulatedHwDevice,
         hardware::{DmaEngineConfigurator, PciHwDevice},
         ops_impl::HwDevice,
+        DeviceAdaptor,
     },
     queue::alloc::DescRingBufAllocator,
     CommandController,
@@ -81,6 +82,9 @@ impl TestDevice {
         };
         cmd_controller.set_network(network_config).unwrap();
 
+        let data = adaptor.read_csr(0x100).unwrap();
+        println!("data: {data}");
+        //adaptor.write_csr(0x100, data).unwrap();
         Ok(Self)
     }
 }

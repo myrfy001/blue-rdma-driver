@@ -22,7 +22,7 @@ use super::{
 #[derive(Debug, Clone)]
 pub(super) struct RpcClient(Arc<UdpSocket>);
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CsrAccessRpcMessage {
     is_write: bool,
     addr: usize,
@@ -31,6 +31,7 @@ struct CsrAccessRpcMessage {
 
 impl RpcClient {
     pub(super) fn new(server_addr: SocketAddr) -> io::Result<Self> {
+        println!("connect to: {server_addr}");
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(server_addr)?;
         Ok(Self(socket.into()))
@@ -43,6 +44,7 @@ impl RpcClient {
             value: 0,
         };
 
+        println!("send msg: {msg:?}");
         let send_buf = serde_json::to_vec(&msg)?;
         let _: usize = self.0.send(&send_buf)?;
 
@@ -61,6 +63,7 @@ impl RpcClient {
             addr,
             value: data,
         };
+        println!("send msg write: {msg:?}");
 
         let send_buf = serde_json::to_vec(&msg)?;
         let _: usize = self.0.send(&send_buf)?;
