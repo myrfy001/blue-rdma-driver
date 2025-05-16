@@ -54,7 +54,6 @@
     clippy::exhaustive_enums,
     clippy::exhaustive_structs,
     clippy::exit,
-    clippy::expect_used,
     clippy::filetype_is_file,
     clippy::float_arithmetic,
     clippy::float_cmp_const,
@@ -158,7 +157,6 @@
         clippy::cast_possible_truncation,
         clippy::cast_lossless,
         clippy::unwrap_in_result,
-        clippy::expect_used,
         clippy::shadow_unrelated,
         dead_code
     )

@@ -153,10 +153,8 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
         #[cfg(feature = "mock")]
         let ctx = BlueRdmaCore::new_mock(&name);
 
-        match ctx {
-            Err(err) => ptr::null_mut(),
-            Ok(ctx) => Box::into_raw(Box::new(ctx)).cast(),
-        }
+        // TODO: properly handles errors
+        Box::into_raw(Box::new(ctx.expect("failed to create device context"))).cast()
     }
 
     #[inline]
