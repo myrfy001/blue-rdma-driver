@@ -1,3 +1,5 @@
+use log::debug;
+
 use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
@@ -81,6 +83,8 @@ impl MetaHandler {
     }
 
     fn handle_nak_local_hw(&mut self, meta: NakMetaLocalHw) -> Option<()> {
+        debug!("nak local hw: {meta:?}");
+
         let tracker = self.recv_table.get_qp_mut(meta.qpn)?;
         if let Some(psn) =
             tracker.nak_bitmap(meta.psn_pre, meta.pre_bitmap, meta.psn_now, meta.now_bitmap)
@@ -92,6 +96,8 @@ impl MetaHandler {
     }
 
     fn handle_nak_remote_hw(&mut self, meta: NakMetaRemoteHw) -> Option<()> {
+        debug!("nak remote hw: {meta:?}");
+
         let tracker = self.send_table.get_qp_mut(meta.qpn)?;
         if let Some(psn) = tracker.nak_bitmap(
             meta.msn,
@@ -116,6 +122,8 @@ impl MetaHandler {
 
     #[allow(clippy::unnecessary_wraps)]
     fn handle_nak_remote_driver(&mut self, meta: NakMetaRemoteDriver) -> Option<()> {
+        debug!("nak remote driver: {meta:?}");
+
         let tracker = self.send_table.get_qp_mut(meta.qpn)?;
         if let Some(psn) = tracker.ack_before(meta.psn_pre) {
             self.sender_updates(meta.qpn, psn);

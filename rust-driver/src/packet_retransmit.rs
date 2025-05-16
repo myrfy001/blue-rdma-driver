@@ -1,5 +1,7 @@
 use std::{cmp::Ordering, collections::VecDeque, iter, thread};
 
+use log::debug;
+
 use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
     device_protocol::{QpParams, WorkReqOpCode, WorkReqSend},
@@ -83,6 +85,8 @@ impl PacketRetransmitWorker {
                 PacketRetransmitTask::RetransmitRange {
                     psn_low, psn_high, ..
                 } => {
+                    debug!("retransmit range, qpn: {qpn}, low: {psn_low}, high: {psn_high}");
+
                     let sqes = sq.range(psn_low, psn_high);
                     let packets = sqes
                         .into_iter()
@@ -97,6 +101,8 @@ impl PacketRetransmitWorker {
                     }
                 }
                 PacketRetransmitTask::RetransmitAll { qpn } => {
+                    debug!("retransmit all, qpn: {qpn}");
+
                     let packets = sq
                         .inner
                         .iter()
