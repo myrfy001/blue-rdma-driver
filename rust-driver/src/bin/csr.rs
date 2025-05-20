@@ -1,4 +1,5 @@
 use std::{
+    env,
     ffi::c_void,
     fmt::Debug,
     fs, io,
@@ -282,11 +283,56 @@ impl<T: FetchDebugInfo> InfoPrinter<T> {
     }
 }
 
+pub(crate) struct RateLimitConfigurator {
+    bar: memmap2::MmapMut,
+}
+
+impl RateLimitConfigurator {
+    const LIMIT_ADDR: usize = 0x10000;
+    const RATE_ADDR: usize = 0x10001;
+
+    pub(crate) fn new(sysfs_path: impl AsRef<Path>) -> io::Result<Self> {
+        let bar_path = sysfs_path.as_ref().join(format!("resource1"));
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&bar_path)?;
+        let mmap = unsafe { memmap2::MmapOptions::new().map_mut(&file)? };
+
+        Ok(Self { bar: mmap })
+    }
+
+    pub(crate) fn set(&mut self, rate: u32, limit: u32) {
+        unsafe {
+            self.bar
+                .as_mut_ptr()
+                .add(Self::RATE_ADDR)
+                .cast::<u32>()
+                .write_volatile(rate);
+            self.bar
+                .as_mut_ptr()
+                .add(Self::LIMIT_ADDR)
+                .cast::<u32>()
+                .write_volatile(limit);
+        }
+    }
+}
+
 fn run_hw() {
     let dev = PciHwDevice::open_default().unwrap();
     let fetcher = DebugInfoFetcher::new(dev.sysfs_path).unwrap();
     let printer = InfoPrinter(fetcher);
     printer.print_binary();
+}
+
+fn run_hw1() {
+    let rate_str = env::var("RATE").unwrap();
+    let limit_str = env::var("LIMIT").unwrap();
+    let rate: u32 = rate_str.parse().unwrap();
+    let limit: u32 = limit_str.parse().unwrap();
+    let dev = PciHwDevice::open_default().unwrap();
+    let mut c = RateLimitConfigurator::new(dev.sysfs_path).unwrap();
+    c.set(rate, limit);
 }
 
 fn run_sim() {
@@ -298,5 +344,5 @@ fn run_sim() {
 }
 
 fn main() {
-    run_hw();
+    run_hw1();
 }
