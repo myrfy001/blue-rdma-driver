@@ -3,7 +3,7 @@ use crossbeam_deque::{Injector, Stealer, Worker};
 use crate::{
     descriptors::{RingBufDescUntyped, SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     protocol::WrChunk,
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 /// Injector

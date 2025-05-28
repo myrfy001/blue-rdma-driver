@@ -28,12 +28,12 @@ use crate::{
     packet_retransmit::PacketRetransmitWorker,
     protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp},
     qp::{QpManager, QueuePairAttrTable},
-    queue::alloc::DescRingBufAllocator,
     rdma_write_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
         TcpChannel,
     },
+    ringbuf_desc::DescRingBufAllocator,
     send::{self, SendQueueScheduler},
     simple_nic::SimpleNicController,
     wr::{SendWr, SendWrBase, SendWrRdma},

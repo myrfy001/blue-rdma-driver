@@ -9,7 +9,7 @@ use crate::{
         AckMetaLocalHw, AckMetaRemoteDriver, CnpMeta, HeaderReadMeta, HeaderWriteMeta, MetaReport,
         NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, ReportMeta,
     },
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
     utils::Psn,
 };
 

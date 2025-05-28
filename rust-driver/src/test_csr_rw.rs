@@ -6,6 +6,7 @@ use crate::{
     mem::{sim_alloc, DmaBufAllocator, PageWithPhysAddr},
     net::config::{MacAddress, NetworkConfig},
     protocol::DeviceCommand,
+    ringbuf_desc::DescRingBufAllocator,
 };
 
 use super::{
@@ -16,7 +17,6 @@ use super::{
         ops_impl::HwDevice,
         DeviceAdaptor,
     },
-    queue::alloc::DescRingBufAllocator,
 };
 static HEAP_ALLOCATOR: sim_alloc::Simalloc = sim_alloc::Simalloc::new();
 

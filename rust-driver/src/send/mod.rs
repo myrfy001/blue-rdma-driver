@@ -6,7 +6,7 @@ use types::{WrInjector, WrWorker};
 use crate::{
     device::{mode::Mode, proxy::build_send_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor},
     mem::DmaBuf,
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 mod scheduler;

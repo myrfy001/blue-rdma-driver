@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     descriptors::simple_nic::{SimpleNicRxQueueDesc, SimpleNicTxQueueDesc},
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 /// A transmit queue for the simple NIC device.

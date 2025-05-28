@@ -11,7 +11,6 @@ use crate::{
     },
     mem::{DmaBuf, PageWithPhysAddr},
     protocol::{WorkReqSend, WrChunk},
-    queue::DescRingBuffer,
 };
 
 use super::types::{SendQueue, SendQueueDesc, WrInjector, WrStealer, WrWorker};

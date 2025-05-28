@@ -22,7 +22,7 @@ use crate::{
     device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
     net::config::{MacAddress, NetworkConfig},
     protocol::{ChunkPos, DeviceCommand, QpParams, WorkReqOpCode, WrChunk, WrChunkBuilder},
-    queue::{alloc::DescRingBufAllocator, DescRingBuffer},
+    ringbuf_desc::{DescRingBufAllocator, DescRingBuffer},
     send::{SendQueue, SendQueueDesc},
     utils::Psn,
 };

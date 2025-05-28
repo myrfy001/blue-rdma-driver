@@ -23,7 +23,7 @@ use crate::{
     mtt::Mtt,
     net::config::NetworkConfig,
     protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 use super::types::{CmdQueue, CmdQueueDesc, CmdRespQueue};

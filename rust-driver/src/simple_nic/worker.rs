@@ -20,7 +20,7 @@ use crate::{
         DmaBuf, PageWithPhysAddr,
     },
     protocol::{FrameRx, FrameTx},
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 use super::{

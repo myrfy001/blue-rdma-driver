@@ -18,8 +18,8 @@ use crate::{
     },
     mem::DmaBuf,
     packet_retransmit::PacketRetransmitTask,
-    queue::DescRingBuffer,
     rdma_write_worker::RdmaWriteTask,
+    ringbuf_desc::DescRingBuffer,
 };
 
 #[allow(clippy::too_many_arguments)]

@@ -12,7 +12,7 @@ use crate::{
     },
     net::config::NetworkConfig,
     protocol::DeviceCommand,
-    queue::DescRingBuffer,
+    ringbuf_desc::DescRingBuffer,
 };
 
 /// Command queue for submitting commands to the device
