@@ -10,9 +10,9 @@ use crate::{
     packet_retransmit::{PacketRetransmitTask, SendQueueElem},
     protocol::{ChunkPos, QpParams, WorkReqOpCode, WorkReqSend, WrChunkBuilder},
     qp::{num_psn, QueuePairAttrTable, SqContext},
-    send::SendWrRdma,
-    send_scheduler::SendQueueScheduler,
+    send::SendQueueScheduler,
     utils::{Psn, QpTable},
+    wr::SendWrRdma,
 };
 
 #[derive(Debug)]

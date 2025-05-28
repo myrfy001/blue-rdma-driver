@@ -31,15 +31,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     completion::Completion,
-    protocol::WorkReqOpCode,
     mem::{
         page::MmapMut,
         virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
         DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
+    protocol::WorkReqOpCode,
     recv::RecvWr,
-    send::SendWr,
     utils::{qpn_index, QpTable},
+    wr::SendWr,
 };
 
 use super::{
@@ -775,7 +775,7 @@ impl Inner {
 #[cfg(test)]
 mod tests {
     use crate::protocol::WorkReqOpCode;
-    use crate::send::{SendWrBase, SendWrRdma};
+    use crate::wr::{SendWrBase, SendWrRdma};
 
     use super::*;
     use bincode::{Decode, Encode};

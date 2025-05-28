@@ -4,9 +4,6 @@ pub(crate) mod cmd_queue;
 /// Simple NIC tx queue implementation
 pub(crate) mod simple_nic;
 
-/// Send queue implementation
-pub(crate) mod send_queue;
-
 /// Queue allocator implementation
 pub(crate) mod alloc;
 

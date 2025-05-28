@@ -14,7 +14,7 @@ use crate::{
     },
     net::config::{MacAddress, NetworkConfig},
     recv::RecvWr,
-    send::SendWr,
+    wr::SendWr,
 };
 
 use super::{

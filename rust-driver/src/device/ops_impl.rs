@@ -34,9 +34,9 @@ use crate::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
         TcpChannel,
     },
-    send::{SendWr, SendWrBase, SendWrRdma},
-    send_scheduler::{spawn_send_workers, SendQueueScheduler},
+    send::{self, SendQueueScheduler},
     simple_nic::SimpleNicController,
+    wr::{SendWr, SendWrBase, SendWrRdma},
 };
 
 use super::{mode::Mode, DeviceAdaptor};
@@ -123,7 +123,7 @@ where
             rb_allocator.alloc()?,
             rx_buffer,
         )?;
-        spawn_send_workers(&adaptor, send_bufs, mode, &send_scheduler.injector())?;
+        send::spawn(&adaptor, send_bufs, mode, &send_scheduler.injector())?;
         meta_report::spawn(
             &adaptor,
             meta_bufs,

@@ -1,11 +1,17 @@
-use std::io;
+use crossbeam_deque::{Injector, Stealer, Worker};
 
 use crate::{
     descriptors::{RingBufDescUntyped, SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-    mem::virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
+    protocol::WrChunk,
+    queue::DescRingBuffer,
 };
 
-use super::DescRingBuffer;
+/// Injector
+pub(super) type WrInjector = Injector<WrChunk>;
+/// Stealer
+pub(super) type WrStealer = Stealer<WrChunk>;
+/// Worker
+pub(super) type WrWorker = Worker<WrChunk>;
 
 /// Send queue descriptor types that can be submitted
 #[derive(Debug, Clone, Copy)]

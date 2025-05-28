@@ -10,7 +10,7 @@ use crate::{
     constants::{MAX_QP_CNT, QPN_KEY_PART_WIDTH},
     packet_retransmit::PacketRetransmitTask,
     protocol::{WorkReqSend, WrChunk},
-    send_scheduler::SendQueueScheduler,
+    send::SendQueueScheduler,
     utils::{qpn_index, QpTable},
 };
 

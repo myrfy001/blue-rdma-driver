@@ -6,10 +6,10 @@ use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
     fragmenter::WrPacketFragmenter,
     protocol::{QpParams, WorkReqOpCode, WorkReqSend},
-    send::SendWrRdma,
-    send_scheduler::SendQueueScheduler,
+    send::SendQueueScheduler,
     utils::qpn_index,
     utils::{Psn, QpTable},
+    wr::SendWrRdma,
 };
 
 #[allow(variant_size_differences)]

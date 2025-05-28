@@ -4,30 +4,17 @@ use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use log::error;
 
 use crate::{
-    device::CsrWriterAdaptor,
-    mem::{DmaBuf, PageWithPhysAddr},
-    protocol::{WorkReqSend, WrChunk},
-};
-
-use super::{
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     device::{
-        mode::Mode,
         proxy::{build_send_queue_proxies, SendQueueProxy},
-        CsrBaseAddrAdaptor, DeviceAdaptor,
+        CsrBaseAddrAdaptor, CsrWriterAdaptor, DeviceAdaptor,
     },
-    queue::{
-        send_queue::{SendQueue, SendQueueDesc},
-        DescRingBuffer,
-    },
+    mem::{DmaBuf, PageWithPhysAddr},
+    protocol::{WorkReqSend, WrChunk},
+    queue::DescRingBuffer,
 };
 
-/// Injector
-type WrInjector = Injector<WrChunk>;
-/// Stealer
-type WrStealer = Stealer<WrChunk>;
-/// Worker
-type WrWorker = Worker<WrChunk>;
+use super::types::{SendQueue, SendQueueDesc, WrInjector, WrStealer, WrWorker};
 
 /// Schedules send work requests across worker threads
 pub(crate) struct SendQueueScheduler {
@@ -126,6 +113,22 @@ pub(crate) struct SendWorker<Dev> {
 }
 
 impl<Dev: DeviceAdaptor + Send + 'static> SendWorker<Dev> {
+    pub(crate) fn new(
+        id: usize,
+        local: WrWorker,
+        global: Arc<WrInjector>,
+        remotes: Box<[WrStealer]>,
+        sq: SendQueueSync<Dev>,
+    ) -> Self {
+        Self {
+            id,
+            local,
+            global,
+            remotes,
+            sq,
+        }
+    }
+
     pub(crate) fn spawn(self) {
         let _handle = std::thread::Builder::new()
             .name(format!("send-worker-{}", self.id))
@@ -142,7 +145,6 @@ impl<Dev: DeviceAdaptor + Send + 'static> SendWorker<Dev> {
             let descs = Self::build_desc(wr);
             if !self.sq.send(descs) {
                 self.local.push(wr);
-                continue;
             }
         }
     }
@@ -195,50 +197,4 @@ impl<Dev: DeviceAdaptor + Send + 'static> SendWorker<Dev> {
             .and_then(Steal::success)
         })
     }
-}
-
-pub(crate) fn spawn_send_workers<Dev>(
-    dev: &Dev,
-    bufs: Vec<DmaBuf>,
-    mode: Mode,
-    global_injector: &Arc<WrInjector>,
-) -> io::Result<()>
-where
-    Dev: DeviceAdaptor + Clone + Send + 'static,
-{
-    let mut sq_proxies = build_send_queue_proxies(dev.clone(), mode);
-    for (proxy, buf) in sq_proxies.iter_mut().zip(bufs.iter()) {
-        proxy.write_base_addr(buf.phys_addr)?;
-    }
-    let send_queues: Vec<_> = bufs
-        .into_iter()
-        .map(|p| SendQueue::new(DescRingBuffer::new(p.buf)))
-        .collect();
-    let workers: Vec<_> = iter::repeat_with(WrWorker::new_fifo)
-        .take(send_queues.len())
-        .collect();
-    let stealers: Vec<_> = workers.iter().map(WrWorker::stealer).collect();
-    let sqs = send_queues
-        .into_iter()
-        .zip(sq_proxies)
-        .map(|(sq, proxy)| SendQueueSync::new(sq, proxy));
-    workers
-        .into_iter()
-        .zip(sqs)
-        .enumerate()
-        .map(|(id, (local, sq))| SendWorker {
-            id,
-            local,
-            global: Arc::clone(global_injector),
-            remotes: stealers
-                .clone()
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, x)| (i != id).then_some(x))
-                .collect(),
-            sq,
-        })
-        .for_each(SendWorker::spawn);
-
-    Ok(())
 }

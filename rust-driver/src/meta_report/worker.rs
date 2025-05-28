@@ -22,8 +22,8 @@ use crate::{
         WorkReqOpCode,
     },
     rdma_write_worker::RdmaWriteTask,
-    send::{SendWrBase, SendWrRdma},
     utils::{Psn, QpTable},
+    wr::{SendWrBase, SendWrRdma},
 };
 
 /// A worker for processing packet meta

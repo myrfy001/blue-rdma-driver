@@ -191,12 +191,11 @@ mod queue;
 mod rdma_write_worker;
 mod recv;
 mod ringbuf;
-/// Send Queue implementations
 mod send;
-mod send_scheduler;
 mod simple_nic;
 mod test_csr_rw;
 mod utils;
+mod wr;
 
 #[allow(unsafe_code)]
 /// Context operations
