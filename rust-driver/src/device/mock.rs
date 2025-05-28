@@ -36,8 +36,8 @@ use crate::{
         virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
         DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
-    protocol::WorkReqOpCode,
     recv::RecvWr,
+    send::WorkReqOpCode,
     utils::{qpn_index, QpTable},
     wr::SendWr,
 };
@@ -774,7 +774,6 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
-    use crate::protocol::WorkReqOpCode;
     use crate::wr::{SendWrBase, SendWrRdma};
 
     use super::*;

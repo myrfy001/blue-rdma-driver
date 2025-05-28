@@ -22,6 +22,8 @@ use crate::{
     ringbuf_desc::DescRingBuffer,
 };
 
+pub(crate) use types::*;
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn<Dev>(
     dev: &Dev,

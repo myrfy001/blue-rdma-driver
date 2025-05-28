@@ -6,10 +6,12 @@ use log::error;
 use crate::{
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     device::{proxy::SendQueueProxy, CsrWriterAdaptor, DeviceAdaptor},
-    protocol::{SendWr, WrChunk},
 };
 
-use super::types::{SendQueue, SendQueueDesc, WrInjector, WrStealer, WrWorker};
+use super::{
+    types::{SendQueue, SendQueueDesc, WrInjector, WrStealer, WrWorker},
+    WrChunk,
+};
 
 #[derive(Clone)]
 pub(crate) struct SendHandle {
@@ -22,8 +24,8 @@ impl SendHandle {
     }
 }
 
-impl SendWr for SendHandle {
-    fn send(&self, wr: WrChunk) -> io::Result<()> {
+impl SendHandle {
+    pub(crate) fn send(&self, wr: WrChunk) -> io::Result<()> {
         self.injector.push(wr);
 
         Ok(())

@@ -22,11 +22,13 @@ use crate::{
     mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
     mtt::Mtt,
     net::config::NetworkConfig,
-    protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
     ringbuf_desc::DescRingBuffer,
 };
 
-use super::types::{CmdQueue, CmdQueueDesc, CmdRespQueue};
+use super::{
+    types::{CmdQueue, CmdQueueDesc, CmdRespQueue},
+    MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp,
+};
 
 /// Controller of the command queue
 pub(crate) struct CommandConfigurator<Dev> {
@@ -94,8 +96,8 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
     }
 }
 
-impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
-    fn update_mtt(&self, update: MttUpdate) -> io::Result<()> {
+impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
+    pub(crate) fn update_mtt(&self, update: MttUpdate) -> io::Result<()> {
         let update_mr_table = CmdQueueReqDescUpdateMrTable::new(
             0,
             update.mr_base_va,
@@ -114,7 +116,7 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
         Ok(())
     }
 
-    fn update_pgt(&self, update: PgtUpdate) -> io::Result<()> {
+    pub(crate) fn update_pgt(&self, update: PgtUpdate) -> io::Result<()> {
         let desc = CmdQueueReqDescUpdatePGT::new(
             0,
             update.dma_addr,
@@ -130,7 +132,7 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
         Ok(())
     }
 
-    fn update_qp(&self, entry: UpdateQp) -> io::Result<()> {
+    pub(crate) fn update_qp(&self, entry: UpdateQp) -> io::Result<()> {
         let desc = CmdQueueReqDescQpManagement::new(
             0,
             entry.ip_addr,
@@ -154,7 +156,7 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
         Ok(())
     }
 
-    fn set_network(&self, param: NetworkConfig) -> io::Result<()> {
+    pub(crate) fn set_network(&self, param: NetworkConfig) -> io::Result<()> {
         let IpAddr::V4(gateway) = param.gateway else {
             unreachable!("IPv6 unsupported")
         };
@@ -175,7 +177,7 @@ impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
         Ok(())
     }
 
-    fn set_raw_packet_recv_buffer(&self, meta: RecvBufferMeta) -> io::Result<()> {
+    pub(crate) fn set_raw_packet_recv_buffer(&self, meta: RecvBufferMeta) -> io::Result<()> {
         let desc = CmdQueueReqDescSetRawPacketReceiveMeta::new(0, meta.phys_addr);
         let mut qp = self.cmd_qp.lock();
         let mut update = qp.update();

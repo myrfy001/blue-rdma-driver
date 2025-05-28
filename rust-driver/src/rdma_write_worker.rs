@@ -8,9 +8,8 @@ use crate::{
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
     packet_retransmit::{PacketRetransmitTask, SendQueueElem},
-    protocol::{ChunkPos, QpParams, SendWr, WorkReqOpCode, WrChunkBuilder},
     qp::{num_psn, QueuePairAttrTable, SqContext},
-    send::SendHandle,
+    send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
     utils::{Psn, QpTable},
     wr::SendWrRdma,
 };

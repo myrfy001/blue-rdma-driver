@@ -1,6 +1,6 @@
 use bilge::prelude::*;
 
-use crate::protocol::{HeaderType, PacketPos};
+use crate::meta_report::{HeaderType, PacketPos};
 
 use super::{RingBufDescCommonHead, RingBufDescUntyped};
 

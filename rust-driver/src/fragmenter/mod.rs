@@ -1,8 +1,8 @@
-use crate::protocol::ChunkPos;
-
 mod chunk;
 
 pub(crate) use chunk::{WrChunkFragmenter, WrPacketFragmenter};
+
+use crate::send::ChunkPos;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Fragmenter {

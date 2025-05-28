@@ -19,10 +19,7 @@ use std::{
 use ipnetwork::IpNetwork;
 use worker::SimpleNicWorker;
 
-use crate::{
-    net::tap::TapDevice,
-    protocol::{FrameRx, FrameTx, RecvBuffer, SimpleNicTunnel},
-};
+use crate::net::tap::TapDevice;
 
 #[allow(clippy::module_name_repetitions)]
 /// Configuration for the simple NIC device
@@ -76,29 +73,14 @@ impl SimpleNicDevice {
     }
 }
 
-/// A launcher for the `SimpleNic` worker thread that handles communication between
-/// the NIC device and tunnel.
-pub(crate) struct Launch<Tunnel> {
-    /// Abstract Tunnel
-    inner: Tunnel,
-    /// Tap device
-    tap_dev: TapDevice,
+/// Trait for transmitting frames
+pub(crate) trait FrameTx {
+    /// Send a buffer of bytes as a frame
+    fn send(&mut self, buf: &[u8]) -> io::Result<()>;
 }
 
-impl<Tunnel: SimpleNicTunnel> Launch<Tunnel> {
-    /// Creates a new `Launch`
-    pub(crate) fn new(inner: Tunnel, tap_dev: TapDevice) -> Self {
-        Self { inner, tap_dev }
-    }
-
-    /// Launches the worker thread that handles communication between the NIC device and tunnel
-    pub(crate) fn launch(self, is_shutdown: Arc<AtomicBool>) -> worker::SimpleNicQueueHandle
-    where
-        <Tunnel as SimpleNicTunnel>::Sender: Send + 'static,
-        <Tunnel as SimpleNicTunnel>::Receiver: Send + 'static,
-    {
-        let (frame_tx, frame_rx) = self.inner.into_split();
-        let worker = SimpleNicWorker::new(self.tap_dev.inner(), frame_tx, frame_rx, is_shutdown);
-        worker.run()
-    }
+/// Trait for receiving frames
+pub(crate) trait FrameRx {
+    /// Try to receive a frame, returning immediately if none available
+    fn recv_nonblocking(&mut self) -> io::Result<Vec<u8>>;
 }

@@ -12,7 +12,7 @@ use crate::{
 mod types;
 mod worker;
 
-pub(crate) use types::{SendQueue, SendQueueDesc};
+pub(crate) use types::*;
 pub(crate) use worker::SendHandle;
 
 pub(crate) fn spawn<Dev>(dev: &Dev, bufs: Vec<DmaBuf>, mode: Mode) -> io::Result<SendHandle>

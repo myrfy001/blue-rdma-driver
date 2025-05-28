@@ -1,5 +1,3 @@
-use crate::protocol::WorkReqOpCode;
-
 use bincode::{Decode, Encode};
 use ibverbs_sys::{
     ibv_send_wr,
@@ -10,6 +8,8 @@ use ibverbs_sys::{
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::send::WorkReqOpCode;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum SendWr {

@@ -19,13 +19,12 @@ use crate::{
         page::{ContiguousPages, MmapMut},
         DmaBuf, PageWithPhysAddr,
     },
-    protocol::{FrameRx, FrameTx},
     ringbuf_desc::DescRingBuffer,
 };
 
 use super::{
     types::{SimpleNicRxQueue, SimpleNicTxQueue},
-    SimpleNicDevice, SimpleNicTunnel,
+    FrameRx, FrameTx, SimpleNicDevice,
 };
 
 pub(crate) struct SimpleNicController<Dev> {
@@ -55,17 +54,13 @@ impl<Dev: DeviceAdaptor> SimpleNicController<Dev> {
     }
 }
 
-impl<Dev: DeviceAdaptor + Send + 'static> SimpleNicTunnel for SimpleNicController<Dev> {
-    type Sender = FrameTxQueue<Dev>;
-
-    type Receiver = FrameRxQueue<Dev>;
-
-    fn into_split(self) -> (Self::Sender, Self::Receiver) {
+impl<Dev> SimpleNicController<Dev> {
+    pub(crate) fn into_split(self) -> (FrameTxQueue<Dev>, FrameRxQueue<Dev>) {
         (self.tx, self.rx)
     }
 
     #[allow(clippy::as_conversions)] // *const T to u64
-    fn recv_buffer_virt_addr(&self) -> u64 {
+    pub(crate) fn recv_buffer_virt_addr(&self) -> u64 {
         self.rx.rx_buf.as_ptr() as u64
     }
 }

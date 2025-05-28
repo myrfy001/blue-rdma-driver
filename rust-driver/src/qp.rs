@@ -13,7 +13,6 @@ use rand::Rng;
 
 use crate::{
     constants::{MAX_MSN_WINDOW, MAX_PSN_WINDOW, MAX_QP_CNT, MAX_SEND_WR, QPN_KEY_PART_WIDTH},
-    protocol::{WithQpParams, WrChunkBuilder},
     utils::Psn,
     wr::SendWrRdma,
 };

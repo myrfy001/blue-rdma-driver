@@ -185,7 +185,6 @@ mod meta_report;
 /// Memory translation table
 mod mtt;
 mod packet_retransmit;
-mod protocol;
 mod qp;
 mod rdma_write_worker;
 mod recv;

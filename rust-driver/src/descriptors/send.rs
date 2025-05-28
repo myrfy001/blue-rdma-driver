@@ -1,6 +1,6 @@
 use bilge::prelude::*;
 
-use crate::protocol::WorkReqOpCode;
+use crate::send::WorkReqOpCode;
 
 use super::RingBufDescCommonHead;
 

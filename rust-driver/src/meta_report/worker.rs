@@ -15,26 +15,29 @@ use crate::{
     ack_timeout::AckTimeoutTask,
     ack_tracker::{LocalAckTracker, RemoteAckTracker},
     completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
+    device::DeviceAdaptor,
     packet_retransmit::PacketRetransmitTask,
-    protocol::{
-        AckMetaLocalHw, AckMetaRemoteDriver, HeaderReadMeta, HeaderType, HeaderWriteMeta,
-        MetaReport, NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, PacketPos, ReportMeta,
-        WorkReqOpCode,
-    },
     rdma_write_worker::RdmaWriteTask,
+    send::WorkReqOpCode,
     utils::{Psn, QpTable},
     wr::{SendWrBase, SendWrRdma},
 };
 
+use super::types::{
+    AckMetaLocalHw, AckMetaRemoteDriver, HeaderReadMeta, HeaderType, HeaderWriteMeta,
+    MetaReportQueueHandler, NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, PacketPos,
+    ReportMeta,
+};
+
 /// A worker for processing packet meta
-pub(crate) struct MetaWorker<T> {
+pub(crate) struct MetaWorker<Dev> {
     /// Inner meta report queue
-    inner: T,
+    inner: MetaReportQueueHandler<Dev>,
     handler: MetaHandler,
 }
 
-impl<T: MetaReport + Send + 'static> MetaWorker<T> {
-    pub(crate) fn new(inner: T, handler: MetaHandler) -> Self {
+impl<Dev: DeviceAdaptor + Send + 'static> MetaWorker<Dev> {
+    pub(crate) fn new(inner: MetaReportQueueHandler<Dev>, handler: MetaHandler) -> Self {
         Self { inner, handler }
     }
 
@@ -47,16 +50,14 @@ impl<T: MetaReport + Send + 'static> MetaWorker<T> {
 
     #[allow(clippy::needless_pass_by_value)] // consume the flag
     /// Run the handler loop
-    fn run(mut self, is_shutdown: Arc<AtomicBool>) -> io::Result<()> {
+    fn run(mut self, is_shutdown: Arc<AtomicBool>) {
         while !is_shutdown.load(Ordering::Relaxed) {
-            if let Some(meta) = self.inner.try_recv_meta()? {
+            if let Some(meta) = self.inner.try_recv_meta() {
                 if self.handler.handle_meta(meta).is_none() {
                     error!("invalid meta: {meta:?}");
                 }
             }
         }
-
-        Ok(())
     }
 }
 

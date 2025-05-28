@@ -5,7 +5,6 @@ use ipnetwork::Ipv4Network;
 use crate::{
     mem::{sim_alloc, DmaBufAllocator, PageWithPhysAddr},
     net::config::{MacAddress, NetworkConfig},
-    protocol::DeviceCommand,
     ringbuf_desc::DescRingBufAllocator,
 };
 

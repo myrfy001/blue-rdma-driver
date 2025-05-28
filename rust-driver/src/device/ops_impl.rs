@@ -11,7 +11,7 @@ use qp_attr::{IbvQpAttr, IbvQpInitAttr};
 use crate::{
     ack_responder::AckResponder,
     ack_timeout::QpAckTimeoutWorker,
-    cmd::CommandConfigurator,
+    cmd::{CommandConfigurator, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
     completion::{
         Completion, CompletionQueueTable, CompletionTask, CompletionWorker, CqManager, Event,
         PostRecvEvent,
@@ -26,7 +26,6 @@ use crate::{
     mtt::{Mtt, PgtEntry},
     net::config::NetworkConfig,
     packet_retransmit::PacketRetransmitWorker,
-    protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp},
     qp::{QpManager, QueuePairAttrTable},
     rdma_write_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{

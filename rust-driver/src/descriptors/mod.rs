@@ -20,7 +20,7 @@ pub(crate) use simple_nic::*;
 
 use bilge::prelude::*;
 
-use crate::protocol::WorkReqOpCode;
+use crate::send::WorkReqOpCode;
 
 /// Size of a descriptor in bytes.
 pub(crate) const DESC_SIZE: usize = 32;

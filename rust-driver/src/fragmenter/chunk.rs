@@ -1,7 +1,7 @@
 use crate::{
     constants::PSN_MASK,
-    protocol::{QpParams, WithIbvParams, WorkReqOpCode, WrChunk, WrChunkBuilder},
     qp::convert_ibv_mtu_to_u16,
+    send::{QpParams, WithIbvParams, WrChunk, WrChunkBuilder},
     utils::Psn,
     wr::SendWrRdma,
 };

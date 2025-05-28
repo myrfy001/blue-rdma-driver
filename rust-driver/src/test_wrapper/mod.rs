@@ -24,9 +24,8 @@ use crate::{
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
     net::config::{MacAddress, NetworkConfig},
-    protocol::{ChunkPos, DeviceCommand, QpParams, WorkReqOpCode, WrChunk, WrChunkBuilder},
     ringbuf_desc::{DescRingBufAllocator, DescRingBuffer},
-    send::{SendQueue, SendQueueDesc},
+    send::{ChunkPos, QpParams, SendQueue, SendQueueDesc, WorkReqOpCode, WrChunkBuilder},
     utils::Psn,
 };
 

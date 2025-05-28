@@ -3,10 +3,7 @@ use std::{collections::HashMap, io, iter, mem::take};
 use bitvec::{array::BitArray, bitarr};
 use rand::Rng;
 
-use crate::{
-    mem::{get_num_page, page::ContiguousPages, virt_to_phy::AddressResolver, PAGE_SIZE},
-    protocol::MttUpdate,
-};
+use crate::mem::{get_num_page, page::ContiguousPages, virt_to_phy::AddressResolver, PAGE_SIZE};
 
 const MAX_MR_CNT: usize = 8192;
 const LR_KEY_KEY_PART_WIDTH: u32 = 8;

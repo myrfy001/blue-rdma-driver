@@ -5,9 +5,7 @@ use std::{
 
 use ipnetwork::IpNetwork;
 
-use crate::protocol::{FrameRx, FrameTx};
-
-use super::{worker::SimpleNicWorker, SimpleNicDevice, SimpleNicDeviceConfig};
+use super::{worker::SimpleNicWorker, FrameRx, FrameTx, SimpleNicDevice, SimpleNicDeviceConfig};
 
 struct FrameTxSocket(UdpSocket);
 
