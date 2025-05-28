@@ -5,11 +5,11 @@ use crate::{
     ack_timeout::AckTimeoutTask,
     ack_tracker::{LocalAckTracker, RemoteAckTracker},
     completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
-    device_protocol::{
+    packet_retransmit::PacketRetransmitTask,
+    protocol::{
         AckMetaLocalHw, AckMetaRemoteDriver, HeaderReadMeta, HeaderType, HeaderWriteMeta,
         NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, PacketPos, ReportMeta, WorkReqOpCode,
     },
-    packet_retransmit::PacketRetransmitTask,
     rdma_write_worker::RdmaWriteTask,
     send::{SendWrBase, SendWrRdma},
     utils::{Psn, QpTable},

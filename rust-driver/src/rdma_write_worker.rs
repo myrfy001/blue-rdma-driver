@@ -6,12 +6,12 @@ use crate::{
     ack_timeout::AckTimeoutTask,
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
-    device_protocol::{ChunkPos, QpParams, WorkReqOpCode, WorkReqSend, WrChunkBuilder},
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
     packet_retransmit::{PacketRetransmitTask, SendQueueElem},
-    protocol_impl::SendQueueScheduler,
+    protocol::{ChunkPos, QpParams, WorkReqOpCode, WorkReqSend, WrChunkBuilder},
     qp::{num_psn, QueuePairAttrTable, SqContext},
     send::SendWrRdma,
+    send_scheduler::SendQueueScheduler,
     utils::{Psn, QpTable},
 };
 

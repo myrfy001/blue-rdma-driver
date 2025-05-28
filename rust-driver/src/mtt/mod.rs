@@ -6,8 +6,8 @@ use std::{collections::HashMap, io, mem::take};
 use alloc::Alloc;
 
 use crate::{
-    device_protocol::MttUpdate,
     mem::{get_num_page, page::ContiguousPages, virt_to_phy::AddressResolver, PAGE_SIZE},
+    protocol::MttUpdate,
 };
 
 /// Memory Translation Table implementation

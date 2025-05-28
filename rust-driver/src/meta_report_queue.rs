@@ -4,7 +4,7 @@ use log::error;
 
 use crate::{
     constants::PSN_MASK,
-    device_protocol::{
+    protocol::{
         AckMetaLocalHw, AckMetaRemoteDriver, CnpMeta, HeaderReadMeta, HeaderWriteMeta, MetaReport,
         NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, ReportMeta,
     },

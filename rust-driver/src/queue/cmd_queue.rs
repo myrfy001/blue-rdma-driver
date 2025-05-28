@@ -1,19 +1,19 @@
 use std::io;
 
 use crate::{
-    device_protocol::DeviceCommand,
-    net::config::NetworkConfig,
-    protocol_impl::device::{
+    descriptors::{
+        CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
+        CmdQueueReqDescSetRawPacketReceiveMeta, CmdQueueReqDescUpdateMrTable,
+        CmdQueueReqDescUpdatePGT, CmdQueueRespDescOnlyCommonHeader, RingBufDescUntyped,
+    },
+    device::{
         proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
         CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
     },
+    net::config::NetworkConfig,
+    protocol::DeviceCommand,
 };
 
-use super::super::desc::{
-    CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
-    CmdQueueReqDescSetRawPacketReceiveMeta, CmdQueueReqDescUpdateMrTable, CmdQueueReqDescUpdatePGT,
-    CmdQueueRespDescOnlyCommonHeader, RingBufDescUntyped,
-};
 use super::DescRingBuffer;
 
 /// Command queue for submitting commands to the device

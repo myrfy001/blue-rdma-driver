@@ -4,13 +4,13 @@ use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use log::error;
 
 use crate::{
-    device_protocol::{WorkReqSend, WrChunk},
+    device::CsrWriterAdaptor,
     mem::{DmaBuf, PageWithPhysAddr},
-    protocol_impl::device::CsrWriterAdaptor,
+    protocol::{WorkReqSend, WrChunk},
 };
 
 use super::{
-    desc::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
+    descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     device::{
         mode::Mode,
         proxy::{build_send_queue_proxies, SendQueueProxy},

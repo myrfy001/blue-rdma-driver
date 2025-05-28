@@ -18,7 +18,7 @@ use ipnetwork::IpNetwork;
 use worker::SimpleNicWorker;
 
 use crate::{
-    device_protocol::{FrameRx, FrameTx, RecvBuffer, SimpleNicTunnel},
+    protocol::{FrameRx, FrameTx, RecvBuffer, SimpleNicTunnel},
     net::tap::TapDevice,
 };
 

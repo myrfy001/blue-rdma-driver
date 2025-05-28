@@ -1,4 +1,4 @@
-use crate::device_protocol::ChunkPos;
+use crate::protocol::ChunkPos;
 
 mod chunk;
 

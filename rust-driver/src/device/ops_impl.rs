@@ -11,15 +11,13 @@ use qp_attr::{IbvQpAttr, IbvQpInitAttr};
 use crate::{
     ack_responder::AckResponder,
     ack_timeout::QpAckTimeoutWorker,
+    cmd_controller::CommandController,
     completion::{
         Completion, CompletionQueueTable, CompletionTask, CompletionWorker, CqManager, Event,
         PostRecvEvent,
     },
     config::DeviceConfig,
     constants::{CARD_IP_ADDRESS, CARD_MAC_ADDRESS},
-    device_protocol::{
-        DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp,
-    },
     mem::{
         get_num_page, page::PageAllocator, pin_pages, virt_to_phy::AddressResolver, DmaBuf,
         DmaBufAllocator, MemoryPinner, PageWithPhysAddr, UmemHandler,
@@ -27,17 +25,17 @@ use crate::{
     mtt::{Mtt, PgtEntry},
     net::config::NetworkConfig,
     packet_retransmit::PacketRetransmitWorker,
-    protocol_impl::{
-        queue::{alloc::DescRingBufAllocator, meta_report_queue::init_and_spawn_meta_worker},
-        spawn_send_workers, CommandController, SendQueueScheduler, SimpleNicController,
-    },
+    protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp},
     qp::{QpManager, QueuePairAttrTable},
+    queue::{alloc::DescRingBufAllocator, meta_report_queue::init_and_spawn_meta_worker},
     rdma_write_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
         TcpChannel,
     },
     send::{SendWr, SendWrBase, SendWrRdma},
+    send_scheduler::{spawn_send_workers, SendQueueScheduler},
+    simple_nic::SimpleNicController,
 };
 
 use super::{mode::Mode, DeviceAdaptor};

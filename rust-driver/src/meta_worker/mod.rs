@@ -14,7 +14,7 @@ use std::{
 
 use log::error;
 
-use crate::device_protocol::MetaReport;
+use crate::protocol::MetaReport;
 
 /// A worker for processing packet meta
 pub(crate) struct MetaWorker<T> {

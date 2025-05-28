@@ -4,15 +4,13 @@ use std::{
 };
 
 use crate::{
+    descriptors::{RingBufDescUntyped, DESC_SIZE},
     mem::{
         page::{ContiguousPages, HostPageAllocator, MmapMut, PageAllocator},
         DmaBuf, DmaBufAllocator,
     },
-    protocol_impl::desc::DESC_SIZE,
     ringbuf::{DmaRingBuf, RING_BUF_LEN},
 };
-
-use super::super::desc::RingBufDescUntyped;
 
 /// Ring buffer storing RDMA descriptors
 pub(crate) struct DescRingBuffer(DmaRingBuf<RingBufDescUntyped>);

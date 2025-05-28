@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     constants::{MAX_QP_CNT, QPN_KEY_PART_WIDTH},
-    device_protocol::{WorkReqSend, WrChunk},
     packet_retransmit::PacketRetransmitTask,
-    protocol_impl::SendQueueScheduler,
+    protocol::{WorkReqSend, WrChunk},
+    send_scheduler::SendQueueScheduler,
     utils::{qpn_index, QpTable},
 };
 

@@ -1,7 +1,7 @@
 use std::{collections::VecDeque, thread};
 
 use crate::{
-    device_protocol::{QpParams, WorkReqOpCode},
+    protocol::{QpParams, WorkReqOpCode},
     send::SendWrRdma,
     utils::{Psn, QpTable},
 };

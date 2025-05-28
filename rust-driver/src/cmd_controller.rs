@@ -10,22 +10,19 @@ use parking_lot::Mutex;
 
 use crate::{
     constants::{CARD_IP_ADDRESS, CARD_MAC_ADDRESS},
-    device_protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
-    mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
-    mtt::Mtt,
-    net::config::NetworkConfig,
-    protocol_impl::device::{
-        proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
-        CsrBaseAddrAdaptor, CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
-    },
-};
-
-use super::{
-    desc::{
+    descriptors::{
         cmd::{CmdQueueReqDescUpdateMrTable, CmdQueueReqDescUpdatePGT},
         CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
         CmdQueueReqDescSetRawPacketReceiveMeta,
     },
+    device::{
+        proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
+        CsrBaseAddrAdaptor, CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
+    },
+    mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
+    mtt::Mtt,
+    net::config::NetworkConfig,
+    protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
     queue::{
         cmd_queue::{CmdQueue, CmdQueueDesc, CmdRespQueue},
         DescRingBuffer,

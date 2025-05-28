@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     completion::Completion,
-    device_protocol::WorkReqOpCode,
+    protocol::WorkReqOpCode,
     mem::{
         page::MmapMut,
         virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
@@ -774,7 +774,7 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
-    use crate::device_protocol::WorkReqOpCode;
+    use crate::protocol::WorkReqOpCode;
     use crate::send::{SendWrBase, SendWrRdma};
 
     use super::*;

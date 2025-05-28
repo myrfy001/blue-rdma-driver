@@ -4,10 +4,10 @@ use log::debug;
 
 use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
-    device_protocol::{QpParams, WorkReqOpCode, WorkReqSend},
     fragmenter::WrPacketFragmenter,
-    protocol_impl::SendQueueScheduler,
+    protocol::{QpParams, WorkReqOpCode, WorkReqSend},
     send::SendWrRdma,
+    send_scheduler::SendQueueScheduler,
     utils::qpn_index,
     utils::{Psn, QpTable},
 };

@@ -10,24 +10,22 @@ use std::{
 use log::error;
 
 use crate::{
-    device_protocol::{FrameRx, FrameTx},
+    descriptors::simple_nic::{SimpleNicRxQueueDesc, SimpleNicTxQueueDesc},
+    device::{
+        proxy::{SimpleNicRxQueueCsrProxy, SimpleNicTxQueueCsrProxy},
+        CsrBaseAddrAdaptor, CsrWriterAdaptor, DeviceAdaptor,
+    },
     mem::{
         page::{ContiguousPages, MmapMut},
         DmaBuf, PageWithPhysAddr,
     },
-    protocol_impl::device::{
-        proxy::{SimpleNicRxQueueCsrProxy, SimpleNicTxQueueCsrProxy},
-        CsrBaseAddrAdaptor, CsrWriterAdaptor, DeviceAdaptor,
-    },
-};
-
-use super::super::{
-    desc::simple_nic::{SimpleNicRxQueueDesc, SimpleNicTxQueueDesc},
+    protocol::{FrameRx, FrameTx},
     queue::{
         simple_nic::{SimpleNicRxQueue, SimpleNicTxQueue},
         DescRingBuffer,
     },
 };
+
 use super::{SimpleNicDevice, SimpleNicTunnel};
 
 pub(crate) struct SimpleNicController<Dev> {

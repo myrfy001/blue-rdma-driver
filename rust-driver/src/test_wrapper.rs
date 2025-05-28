@@ -17,17 +17,15 @@ use std::io;
 use ipnetwork::Ipv4Network;
 
 use crate::{
-    device_protocol::{ChunkPos, DeviceCommand, QpParams, WorkReqOpCode, WrChunk, WrChunkBuilder},
+    cmd_controller::CommandController,
+    descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
+    device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
     net::config::{MacAddress, NetworkConfig},
-    protocol_impl::{
-        desc::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-        device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
-        queue::{
-            alloc::DescRingBufAllocator,
-            send_queue::{SendQueue, SendQueueDesc},
-            DescRingBuffer,
-        },
-        CommandController,
+    protocol::{ChunkPos, DeviceCommand, QpParams, WorkReqOpCode, WrChunk, WrChunkBuilder},
+    queue::{
+        alloc::DescRingBufAllocator,
+        send_queue::{SendQueue, SendQueueDesc},
+        DescRingBuffer,
     },
     utils::Psn,
 };

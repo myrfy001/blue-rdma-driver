@@ -170,26 +170,32 @@
 mod ack_responder;
 mod ack_timeout;
 mod ack_tracker;
+mod cmd_controller;
 mod completion;
 mod config;
 /// Constants used throughout the driver
 mod constants;
+mod descriptors;
 mod device;
 mod fragmenter;
 /// Memory operation components
 #[allow(unsafe_code)]
 mod mem;
+mod meta_report_queue;
 mod meta_worker;
 /// Memory translation table
 mod mtt;
 mod packet_retransmit;
 mod protocol;
 mod qp;
+mod queue;
 mod rdma_write_worker;
 mod recv;
 mod ringbuf;
 /// Send Queue implementations
 mod send;
+mod send_scheduler;
+mod simple_nic;
 mod sq_worker;
 mod test_csr_rw;
 mod utils;

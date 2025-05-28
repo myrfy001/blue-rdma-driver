@@ -1,4 +1,4 @@
-use crate::device_protocol::WorkReqOpCode;
+use crate::protocol::WorkReqOpCode;
 
 use bincode::{Decode, Encode};
 use ibverbs_sys::{

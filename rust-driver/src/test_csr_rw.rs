@@ -3,12 +3,13 @@ use std::{io, net::Ipv4Addr};
 use ipnetwork::Ipv4Network;
 
 use crate::{
-    device_protocol::DeviceCommand,
     mem::{sim_alloc, DmaBufAllocator, PageWithPhysAddr},
     net::config::{MacAddress, NetworkConfig},
+    protocol::DeviceCommand,
 };
 
 use super::{
+    cmd_controller::CommandController,
     device::{
         ffi_impl::EmulatedHwDevice,
         hardware::{DmaEngineConfigurator, PciHwDevice},
@@ -16,7 +17,6 @@ use super::{
         DeviceAdaptor,
     },
     queue::alloc::DescRingBufAllocator,
-    CommandController,
 };
 static HEAP_ALLOCATOR: sim_alloc::Simalloc = sim_alloc::Simalloc::new();
 

@@ -7,20 +7,18 @@ use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
     completion::CompletionTask,
+    descriptors::{
+        MetaReportQueueAckDesc, MetaReportQueueAckExtraDesc, MetaReportQueueDescFirst,
+        MetaReportQueueDescNext, MetaReportQueuePacketBasicInfoDesc,
+        MetaReportQueueReadReqExtendInfoDesc,
+    },
+    device::{
+        mode::Mode, proxy::build_meta_report_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor,
+    },
     mem::DmaBuf,
+    meta_report_queue::{MetaReportQueueCtx, MetaReportQueueHandler},
     meta_worker::{MetaHandler, MetaWorker},
     packet_retransmit::PacketRetransmitTask,
-    protocol_impl::{
-        desc::{
-            MetaReportQueueAckDesc, MetaReportQueueAckExtraDesc, MetaReportQueueDescFirst,
-            MetaReportQueueDescNext, MetaReportQueuePacketBasicInfoDesc,
-            MetaReportQueueReadReqExtendInfoDesc,
-        },
-        device::{
-            mode::Mode, proxy::build_meta_report_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor,
-        },
-        MetaReportQueueCtx, MetaReportQueueHandler,
-    },
     rdma_write_worker::RdmaWriteTask,
 };
 
