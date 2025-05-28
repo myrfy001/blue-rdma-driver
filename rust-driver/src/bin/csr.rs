@@ -318,6 +318,24 @@ impl RateLimitConfigurator {
     }
 }
 
+pub(crate) struct SimRateLimitConfigurator {
+    bar: EmulatedDevice,
+}
+
+impl SimRateLimitConfigurator {
+    const LIMIT_ADDR: usize = 0x4000;
+    const RATE_ADDR: usize = 0x4004;
+
+    pub(crate) fn new(bar: EmulatedDevice) -> Self {
+        Self { bar }
+    }
+
+    pub(crate) fn set(&mut self, rate: u32, limit: u32) {
+        self.bar.write_csr(Self::RATE_ADDR, rate);
+        self.bar.write_csr(Self::LIMIT_ADDR, limit);
+    }
+}
+
 fn run_hw() {
     let dev = PciHwDevice::open_default().unwrap();
     let fetcher = DebugInfoFetcher::new(dev.sysfs_path).unwrap();
@@ -343,6 +361,14 @@ fn run_sim() {
     }
 }
 
+fn run_sim1() {
+    let dev = EmulatedDevice::new_with_addr("127.0.0.1:7701".into());
+    let mut c = SimRateLimitConfigurator::new(dev);
+    for _ in 0..11 {
+        c.set(3, 5);
+    }
+}
+
 fn main() {
-    run_hw1();
+    run_sim1();
 }
