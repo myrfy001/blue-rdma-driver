@@ -4,6 +4,8 @@ mod route;
 /// worker handling NIC frames
 mod worker;
 
+mod types;
+
 #[cfg(test)]
 mod tests;
 
@@ -18,8 +20,8 @@ use ipnetwork::IpNetwork;
 use worker::SimpleNicWorker;
 
 use crate::{
-    protocol::{FrameRx, FrameTx, RecvBuffer, SimpleNicTunnel},
     net::tap::TapDevice,
+    protocol::{FrameRx, FrameTx, RecvBuffer, SimpleNicTunnel},
 };
 
 #[allow(clippy::module_name_repetitions)]

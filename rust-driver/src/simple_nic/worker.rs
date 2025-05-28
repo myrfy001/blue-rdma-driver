@@ -20,13 +20,13 @@ use crate::{
         DmaBuf, PageWithPhysAddr,
     },
     protocol::{FrameRx, FrameTx},
-    queue::{
-        simple_nic::{SimpleNicRxQueue, SimpleNicTxQueue},
-        DescRingBuffer,
-    },
+    queue::DescRingBuffer,
 };
 
-use super::{SimpleNicDevice, SimpleNicTunnel};
+use super::{
+    types::{SimpleNicRxQueue, SimpleNicTxQueue},
+    SimpleNicDevice, SimpleNicTunnel,
+};
 
 pub(crate) struct SimpleNicController<Dev> {
     tx: FrameTxQueue<Dev>,

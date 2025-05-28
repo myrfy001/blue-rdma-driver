@@ -3,9 +3,10 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use crate::descriptors::simple_nic::{SimpleNicRxQueueDesc, SimpleNicTxQueueDesc};
-
-use super::DescRingBuffer;
+use crate::{
+    descriptors::simple_nic::{SimpleNicRxQueueDesc, SimpleNicTxQueueDesc},
+    queue::DescRingBuffer,
+};
 
 /// A transmit queue for the simple NIC device.
 pub(crate) struct SimpleNicTxQueue {
