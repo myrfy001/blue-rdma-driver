@@ -17,8 +17,8 @@ use crate::{
         mode::Mode, proxy::build_meta_report_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor,
     },
     mem::DmaBuf,
-    packet_retransmit::PacketRetransmitTask,
-    rdma_write_worker::RdmaWriteTask,
+    rdma_worker::RdmaWriteTask,
+    retransmit::PacketRetransmitTask,
     ringbuf_desc::DescRingBuffer,
 };
 

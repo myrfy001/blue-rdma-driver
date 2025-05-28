@@ -7,8 +7,8 @@ use crate::{
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
-    packet_retransmit::{PacketRetransmitTask, SendQueueElem},
     qp::{num_psn, QueuePairAttrTable, SqContext},
+    retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
     utils::{Psn, QpTable},
     wr::SendWrRdma,
@@ -43,8 +43,8 @@ pub(crate) struct RdmaWriteWorker {
     qp_attr_table: QueuePairAttrTable,
     send_handle: SendHandle,
     rdma_write_rx: flume::Receiver<RdmaWriteTask>,
-    retransmit_tx: flume::Sender<AckTimeoutTask>,
-    packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
+    timeout_tx: flume::Sender<AckTimeoutTask>,
+    retransmit_tx: flume::Sender<PacketRetransmitTask>,
     completion_tx: flume::Sender<CompletionTask>,
 }
 
@@ -53,8 +53,8 @@ impl RdmaWriteWorker {
         rdma_write_rx: flume::Receiver<RdmaWriteTask>,
         qp_attr_table: QueuePairAttrTable,
         send_handle: SendHandle,
-        retransmit_tx: flume::Sender<AckTimeoutTask>,
-        packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
+        timeout_tx: flume::Sender<AckTimeoutTask>,
+        retransmit_tx: flume::Sender<PacketRetransmitTask>,
         completion_tx: flume::Sender<CompletionTask>,
     ) -> Self {
         Self {
@@ -62,8 +62,8 @@ impl RdmaWriteWorker {
             sq_ctx_table: QpTable::new(),
             qp_attr_table,
             send_handle,
+            timeout_tx,
             retransmit_tx,
-            packet_retransmit_tx,
             completion_tx,
         }
     }
@@ -155,10 +155,10 @@ impl RdmaWriteWorker {
         }
 
         if ack_req {
-            let _ignore = self.retransmit_tx.send(AckTimeoutTask::new_ack_req(qpn));
+            let _ignore = self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
-        let _ignore = self.packet_retransmit_tx.send(PacketRetransmitTask::NewWr {
+        let _ignore = self.retransmit_tx.send(PacketRetransmitTask::NewWr {
             qpn,
             wr: SendQueueElem::new(wr, psn, qp_params),
         });
@@ -224,10 +224,10 @@ impl RdmaWriteWorker {
             let Some(last_packet_chunk) = fragmenter.into_iter().last() else {
                 return Ok(());
             };
-            let _ignore = self.retransmit_tx.send(AckTimeoutTask::new_ack_req(qpn));
+            let _ignore = self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
-        let _ignore = self.packet_retransmit_tx.send(PacketRetransmitTask::NewWr {
+        let _ignore = self.retransmit_tx.send(PacketRetransmitTask::NewWr {
             qpn,
             wr: SendQueueElem::new(wr, psn, qp_params),
         });

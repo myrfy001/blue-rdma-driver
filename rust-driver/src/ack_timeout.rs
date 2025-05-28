@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     constants::{MAX_QP_CNT, QPN_KEY_PART_WIDTH},
-    packet_retransmit::PacketRetransmitTask,
+    retransmit::PacketRetransmitTask,
     send::SendHandle,
     utils::{qpn_index, QpTable},
 };

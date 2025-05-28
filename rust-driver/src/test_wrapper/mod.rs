@@ -22,7 +22,7 @@ use ipnetwork::Ipv4Network;
 use crate::{
     cmd::CommandConfigurator,
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-    device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
+    device::{ffi::EmulatedHwDevice, ops::HwDevice},
     net::config::{MacAddress, NetworkConfig},
     ringbuf_desc::{DescRingBufAllocator, DescRingBuffer},
     send::{ChunkPos, QpParams, SendQueue, SendQueueDesc, WorkReqOpCode, WrChunkBuilder},

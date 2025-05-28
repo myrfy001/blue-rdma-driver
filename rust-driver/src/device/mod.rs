@@ -19,9 +19,9 @@ pub(crate) mod adaptor;
 /// Device mode reader
 pub(crate) mod mode;
 
-pub(crate) mod ops_impl;
+pub(crate) mod ops;
 
-pub(crate) mod ffi_impl;
+pub(crate) mod ffi;
 
 pub(crate) use adaptor::*;
 

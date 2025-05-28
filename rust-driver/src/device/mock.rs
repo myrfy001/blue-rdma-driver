@@ -43,7 +43,7 @@ use crate::{
 };
 
 use super::{
-    ops_impl::{
+    ops::{
         qp_attr::{IbvQpAttr, IbvQpInitAttr},
         DeviceOps, HwDevice,
     },

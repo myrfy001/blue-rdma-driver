@@ -18,7 +18,7 @@ use crate::mem::{
     virt_to_phy::PhysAddrResolverLinuxX86, HostUmemHandler,
 };
 
-use super::{ops_impl::HwDevice, DeviceAdaptor};
+use super::{ops::HwDevice, DeviceAdaptor};
 
 const BAR_INDEX: usize = 0;
 const BAR_INDEX_DMA_ENGINE: usize = 1;

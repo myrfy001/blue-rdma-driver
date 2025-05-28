@@ -184,10 +184,13 @@ mod mem;
 mod meta_report;
 /// Memory translation table
 mod mtt;
-mod packet_retransmit;
+#[allow(unused)]
+/// Network implementations
+pub mod net;
 mod qp;
-mod rdma_write_worker;
+mod rdma_worker;
 mod recv;
+mod retransmit;
 mod ringbuf;
 mod ringbuf_desc;
 mod send;
@@ -195,14 +198,6 @@ mod simple_nic;
 mod utils;
 mod wr;
 
-#[allow(unsafe_code)]
-/// Context operations
-pub mod ctx_ops;
-
-#[allow(unused)]
-/// Network implementations
-pub mod net;
-
-pub use device::ffi_impl::BlueRdmaCore;
+pub use device::ffi::BlueRdmaCore;
 pub use simple_nic::SimpleNicDeviceConfig;
 pub mod test_wrapper;

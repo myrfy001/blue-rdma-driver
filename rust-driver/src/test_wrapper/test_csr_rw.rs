@@ -11,9 +11,9 @@ use crate::{
 use crate::{
     cmd::CommandConfigurator,
     device::{
-        ffi_impl::EmulatedHwDevice,
+        ffi::EmulatedHwDevice,
         hardware::{DmaEngineConfigurator, PciHwDevice},
-        ops_impl::HwDevice,
+        ops::HwDevice,
         DeviceAdaptor,
     },
 };
