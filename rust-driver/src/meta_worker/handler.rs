@@ -3,6 +3,7 @@ use log::debug;
 use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
+    ack_tracker::{LocalAckTracker, RemoteAckTracker},
     completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
     device_protocol::{
         AckMetaLocalHw, AckMetaRemoteDriver, HeaderReadMeta, HeaderType, HeaderWriteMeta,
@@ -11,7 +12,6 @@ use crate::{
     packet_retransmit::PacketRetransmitTask,
     rdma_write_worker::RdmaWriteTask,
     send::{SendWrBase, SendWrRdma},
-    tracker::{LocalAckTracker, RemoteAckTracker},
     utils::{Psn, QpTable},
 };
 

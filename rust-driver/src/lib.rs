@@ -169,6 +169,7 @@
 
 mod ack_responder;
 mod ack_timeout;
+mod ack_tracker;
 mod completion;
 mod config;
 /// Constants used throughout the driver
@@ -190,7 +191,6 @@ mod ringbuf;
 /// Send Queue implementations
 mod send;
 mod sq_worker;
-mod tracker;
 mod utils;
 
 #[allow(unsafe_code)]
