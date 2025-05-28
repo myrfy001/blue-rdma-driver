@@ -196,7 +196,6 @@ mod ringbuf;
 mod send;
 mod send_scheduler;
 mod simple_nic;
-mod sq_worker;
 mod test_csr_rw;
 mod utils;
 
