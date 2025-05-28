@@ -12,6 +12,9 @@
     clippy::arithmetic_side_effects
 )]
 
+pub mod bench;
+pub mod test_csr_rw;
+
 use std::io;
 
 use ipnetwork::Ipv4Network;

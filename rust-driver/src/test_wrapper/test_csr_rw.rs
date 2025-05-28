@@ -9,7 +9,7 @@ use crate::{
     ringbuf_desc::DescRingBufAllocator,
 };
 
-use super::{
+use crate::{
     cmd::CommandConfigurator,
     device::{
         ffi_impl::EmulatedHwDevice,

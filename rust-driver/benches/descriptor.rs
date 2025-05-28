@@ -1,4 +1,4 @@
-use blue_rdma_driver::bench_wrappers::descs::MetaReportQueueDescBthRethWrapper;
+use blue_rdma_driver::test_wrapper::bench::descs::MetaReportQueueDescBthRethWrapper;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 #[allow(clippy::unit_arg)]

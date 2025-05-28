@@ -1,4 +1,4 @@
-use blue_rdma_driver::bench_wrappers::{
+use blue_rdma_driver::test_wrapper::bench::{
     virt_to_phy_bench_range_wrapper, virt_to_phy_bench_wrapper,
 };
 use criterion::{black_box, criterion_group, criterion_main, Criterion};

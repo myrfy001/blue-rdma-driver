@@ -193,7 +193,6 @@ mod ringbuf;
 mod ringbuf_desc;
 mod send;
 mod simple_nic;
-mod test_csr_rw;
 mod utils;
 mod wr;
 
@@ -207,7 +206,4 @@ pub mod net;
 
 pub use device::ffi_impl::BlueRdmaCore;
 pub use simple_nic::SimpleNicDeviceConfig;
-pub use test_csr_rw::TestDevice;
-
-pub mod bench_wrappers;
 pub mod test_wrapper;
