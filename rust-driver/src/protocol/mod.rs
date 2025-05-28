@@ -21,7 +21,7 @@ pub(crate) trait DeviceCommand {
 }
 
 /// RDMA send operations interface
-pub(crate) trait WorkReqSend {
+pub(crate) trait SendWr {
     /// Sends an RDMA operation
     fn send(&self, op: WrChunk) -> io::Result<()>;
 }

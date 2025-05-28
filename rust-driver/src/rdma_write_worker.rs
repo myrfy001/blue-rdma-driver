@@ -8,9 +8,9 @@ use crate::{
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
     packet_retransmit::{PacketRetransmitTask, SendQueueElem},
-    protocol::{ChunkPos, QpParams, WorkReqOpCode, WorkReqSend, WrChunkBuilder},
+    protocol::{ChunkPos, QpParams, SendWr, WorkReqOpCode, WrChunkBuilder},
     qp::{num_psn, QueuePairAttrTable, SqContext},
-    send::SendQueueScheduler,
+    send::SendHandle,
     utils::{Psn, QpTable},
     wr::SendWrRdma,
 };
@@ -42,7 +42,7 @@ impl RdmaWriteTask {
 pub(crate) struct RdmaWriteWorker {
     sq_ctx_table: QpTable<SqContext>,
     qp_attr_table: QueuePairAttrTable,
-    send_scheduler: SendQueueScheduler,
+    send_handle: SendHandle,
     rdma_write_rx: flume::Receiver<RdmaWriteTask>,
     retransmit_tx: flume::Sender<AckTimeoutTask>,
     packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
@@ -53,7 +53,7 @@ impl RdmaWriteWorker {
     pub(crate) fn new(
         rdma_write_rx: flume::Receiver<RdmaWriteTask>,
         qp_attr_table: QueuePairAttrTable,
-        send_scheduler: SendQueueScheduler,
+        send_handle: SendHandle,
         retransmit_tx: flume::Sender<AckTimeoutTask>,
         packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
         completion_tx: flume::Sender<CompletionTask>,
@@ -62,7 +62,7 @@ impl RdmaWriteWorker {
             rdma_write_rx,
             sq_ctx_table: QpTable::new(),
             qp_attr_table,
-            send_scheduler,
+            send_handle,
             retransmit_tx,
             packet_retransmit_tx,
             completion_tx,
@@ -164,7 +164,7 @@ impl RdmaWriteWorker {
             wr: SendQueueElem::new(wr, psn, qp_params),
         });
 
-        self.send_scheduler.send(chunk)?;
+        self.send_handle.send(chunk)?;
 
         Ok(())
     }
@@ -235,7 +235,7 @@ impl RdmaWriteWorker {
 
         let fragmenter = WrChunkFragmenter::new(wr, qp_params, psn);
         for chunk in fragmenter {
-            self.send_scheduler.send(chunk)?;
+            self.send_handle.send(chunk)?;
         }
 
         Ok(())

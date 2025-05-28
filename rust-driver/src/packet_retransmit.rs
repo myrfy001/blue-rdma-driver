@@ -5,8 +5,8 @@ use log::debug;
 use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
     fragmenter::WrPacketFragmenter,
-    protocol::{QpParams, WorkReqOpCode, WorkReqSend},
-    send::SendQueueScheduler,
+    protocol::{QpParams, SendWr, WorkReqOpCode},
+    send::SendHandle,
     utils::qpn_index,
     utils::{Psn, QpTable},
     wr::SendWrRdma,
@@ -47,14 +47,14 @@ impl PacketRetransmitTask {
 
 pub(crate) struct PacketRetransmitWorker {
     receiver: flume::Receiver<PacketRetransmitTask>,
-    wr_sender: SendQueueScheduler,
+    wr_sender: SendHandle,
     table: QpTable<IbvSendQueue>,
 }
 
 impl PacketRetransmitWorker {
     pub(crate) fn new(
         receiver: flume::Receiver<PacketRetransmitTask>,
-        wr_sender: SendQueueScheduler,
+        wr_sender: SendHandle,
     ) -> Self {
         Self {
             receiver,

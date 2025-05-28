@@ -1,7 +1,7 @@
 use std::{io, iter, sync::Arc};
 
-use scheduler::{SendQueueSync, SendWorker};
 use types::{WrInjector, WrWorker};
+use worker::{SendQueueSync, SendWorker};
 
 use crate::{
     device::{mode::Mode, proxy::build_send_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor},
@@ -9,21 +9,18 @@ use crate::{
     ringbuf_desc::DescRingBuffer,
 };
 
-mod scheduler;
 mod types;
+mod worker;
 
-pub(crate) use scheduler::SendQueueScheduler;
 pub(crate) use types::{SendQueue, SendQueueDesc};
+pub(crate) use worker::SendHandle;
 
-pub(crate) fn spawn<Dev>(
-    dev: &Dev,
-    bufs: Vec<DmaBuf>,
-    mode: Mode,
-    global_injector: &Arc<WrInjector>,
-) -> io::Result<()>
+pub(crate) fn spawn<Dev>(dev: &Dev, bufs: Vec<DmaBuf>, mode: Mode) -> io::Result<SendHandle>
 where
     Dev: DeviceAdaptor + Clone + Send + 'static,
 {
+    let injector = Arc::new(WrInjector::new());
+    let handle = SendHandle::new(Arc::clone(&injector));
     let mut sq_proxies = build_send_queue_proxies(dev.clone(), mode);
     for (proxy, buf) in sq_proxies.iter_mut().zip(bufs.iter()) {
         proxy.write_base_addr(buf.phys_addr)?;
@@ -48,7 +45,7 @@ where
             SendWorker::new(
                 id,
                 local,
-                Arc::clone(global_injector),
+                Arc::clone(&injector),
                 stealers
                     .clone()
                     .into_iter()
@@ -60,5 +57,5 @@ where
         })
         .for_each(SendWorker::spawn);
 
-    Ok(())
+    Ok(handle)
 }

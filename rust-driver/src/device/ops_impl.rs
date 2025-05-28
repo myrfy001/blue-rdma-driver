@@ -34,7 +34,7 @@ use crate::{
         TcpChannel,
     },
     ringbuf_desc::DescRingBufAllocator,
-    send::{self, SendQueueScheduler},
+    send::{self, SendHandle},
     simple_nic::SimpleNicController,
     wr::{SendWr, SendWrBase, SendWrRdma},
 };
@@ -95,7 +95,6 @@ where
         let mut rb_allocator = DescRingBufAllocator::new(&mut allocator);
         let cmd_controller =
             CommandConfigurator::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)?;
-        let send_scheduler = SendQueueScheduler::new();
         let send_bufs = iter::repeat_with(|| rb_allocator.alloc())
             .take(mode.num_channel())
             .collect::<Result<_, _>>()?;
@@ -123,7 +122,7 @@ where
             rb_allocator.alloc()?,
             rx_buffer,
         )?;
-        send::spawn(&adaptor, send_bufs, mode, &send_scheduler.injector())?;
+        let handle = send::spawn(&adaptor, send_bufs, mode)?;
         meta_report::spawn(
             &adaptor,
             meta_bufs,
@@ -153,15 +152,15 @@ where
         QpAckTimeoutWorker::new(
             ack_timeout_rx,
             packet_retransmit_tx.clone(),
-            send_scheduler.clone_arc(),
+            handle.clone(),
             config.ack(),
         )
         .spawn();
-        PacketRetransmitWorker::new(packet_retransmit_rx, send_scheduler.clone_arc()).spawn();
+        PacketRetransmitWorker::new(packet_retransmit_rx, handle.clone()).spawn();
         RdmaWriteWorker::new(
             rdma_write_rx,
             qp_attr_table,
-            send_scheduler,
+            handle,
             ack_timeout_tx,
             packet_retransmit_tx,
             completion_tx.clone(),

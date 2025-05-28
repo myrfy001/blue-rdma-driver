@@ -5,51 +5,27 @@ use log::error;
 
 use crate::{
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-    device::{
-        proxy::{build_send_queue_proxies, SendQueueProxy},
-        CsrBaseAddrAdaptor, CsrWriterAdaptor, DeviceAdaptor,
-    },
-    mem::{DmaBuf, PageWithPhysAddr},
-    protocol::{WorkReqSend, WrChunk},
+    device::{proxy::SendQueueProxy, CsrWriterAdaptor, DeviceAdaptor},
+    protocol::{SendWr, WrChunk},
 };
 
 use super::types::{SendQueue, SendQueueDesc, WrInjector, WrStealer, WrWorker};
 
-/// Schedules send work requests across worker threads
-pub(crate) struct SendQueueScheduler {
-    /// Work request injector for distributing work to worker threads
-    injector: Arc<WrInjector>,
+#[derive(Clone)]
+pub(crate) struct SendHandle {
+    pub(super) injector: Arc<WrInjector>,
 }
 
-impl SendQueueScheduler {
-    pub(crate) fn new() -> Self {
-        Self {
-            injector: WrInjector::new().into(),
-        }
+impl SendHandle {
+    pub(crate) fn new(injector: Arc<WrInjector>) -> Self {
+        Self { injector }
     }
+}
 
-    pub(crate) fn clone_arc(&self) -> Self {
-        Self {
-            injector: Arc::clone(&self.injector),
-        }
-    }
-
-    pub(crate) fn injector(&self) -> Arc<WrInjector> {
-        Arc::clone(&self.injector)
-    }
-
-    /// Submits a work request chunk to be processed by worker threads
-    ///
-    /// # Arguments
-    /// * `wr` - The work request chunk to be scheduled
-    fn send_wr_task(&self, wr: WrChunk) {
+impl SendWr for SendHandle {
+    fn send(&self, wr: WrChunk) -> io::Result<()> {
         self.injector.push(wr);
-    }
-}
 
-impl WorkReqSend for SendQueueScheduler {
-    fn send(&self, op: WrChunk) -> io::Result<()> {
-        self.send_wr_task(op);
         Ok(())
     }
 }

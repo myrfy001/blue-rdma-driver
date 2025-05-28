@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     constants::{MAX_QP_CNT, QPN_KEY_PART_WIDTH},
     packet_retransmit::PacketRetransmitTask,
-    protocol::{WorkReqSend, WrChunk},
-    send::SendQueueScheduler,
+    protocol::{SendWr, WrChunk},
+    send::SendHandle,
     utils::{qpn_index, QpTable},
 };
 
@@ -159,7 +159,7 @@ pub(crate) struct QpAckTimeoutWorker {
     timer_table: QpTable<TransportTimer>,
     // TODO: maintain this value as atomic variable
     outstanding_ack_req_cnt: QpTable<usize>,
-    wr_sender: SendQueueScheduler,
+    wr_sender: SendHandle,
     config: AckTimeoutConfig,
 }
 
@@ -167,7 +167,7 @@ impl QpAckTimeoutWorker {
     pub(crate) fn new(
         task_rx: flume::Receiver<AckTimeoutTask>,
         packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
-        wr_sender: SendQueueScheduler,
+        wr_sender: SendHandle,
         config: AckTimeoutConfig,
     ) -> Self {
         let timer_table = QpTable::new_with(|| {
