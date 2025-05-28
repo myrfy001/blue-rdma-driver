@@ -17,7 +17,7 @@ use std::io;
 use ipnetwork::Ipv4Network;
 
 use crate::{
-    cmd_controller::CommandController,
+    cmd::CommandConfigurator,
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     device::{ffi_impl::EmulatedHwDevice, ops_impl::HwDevice},
     net::config::{MacAddress, NetworkConfig},
@@ -33,7 +33,8 @@ pub fn test_full_rb() -> io::Result<()> {
     let mut allocator = device.new_dma_buf_allocator().unwrap();
     let mut rb_allocator = DescRingBufAllocator::new(allocator);
     let cmd_controller =
-        CommandController::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?).unwrap();
+        CommandConfigurator::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)
+            .unwrap();
     let network_config = NetworkConfig {
         ip: Ipv4Network::new("10.0.0.2".parse().unwrap(), 24).unwrap(),
         peer_ip: "10.0.0.1".parse().unwrap(),

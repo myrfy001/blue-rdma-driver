@@ -12,9 +12,8 @@ use crate::{
     },
     net::config::NetworkConfig,
     protocol::DeviceCommand,
+    queue::DescRingBuffer,
 };
-
-use super::DescRingBuffer;
 
 /// Command queue for submitting commands to the device
 pub(crate) struct CmdQueue {

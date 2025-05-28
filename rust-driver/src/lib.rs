@@ -170,7 +170,7 @@
 mod ack_responder;
 mod ack_timeout;
 mod ack_tracker;
-mod cmd_controller;
+mod cmd;
 mod completion;
 mod config;
 /// Constants used throughout the driver

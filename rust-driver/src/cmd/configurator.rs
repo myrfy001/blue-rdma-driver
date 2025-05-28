@@ -23,14 +23,13 @@ use crate::{
     mtt::Mtt,
     net::config::NetworkConfig,
     protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
-    queue::{
-        cmd_queue::{CmdQueue, CmdQueueDesc, CmdRespQueue},
-        DescRingBuffer,
-    },
+    queue::DescRingBuffer,
 };
 
+use super::types::{CmdQueue, CmdQueueDesc, CmdRespQueue};
+
 /// Controller of the command queue
-pub(crate) struct CommandController<Dev> {
+pub(crate) struct CommandConfigurator<Dev> {
     /// Command queue pair
     cmd_qp: Mutex<CmdQp>,
     /// Proxy for accessing command queue CSRs
@@ -39,11 +38,11 @@ pub(crate) struct CommandController<Dev> {
     resp_csr_proxy: CmdRespQueueCsrProxy<Dev>,
 }
 
-impl<Dev: DeviceAdaptor> CommandController<Dev> {
+impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
     /// Creates a new command controller instance
     ///
     /// # Returns
-    /// A new `CommandController` with an initialized command queue
+    /// A new `CommandConfigurator` with an initialized command queue
     pub(crate) fn init(
         dev: &Dev,
         req_rb: DescRingBuffer,
@@ -68,7 +67,7 @@ impl<Dev: DeviceAdaptor> CommandController<Dev> {
     /// Creates a new command controller instance
     ///
     /// # Returns
-    /// A new `CommandController` with an initialized command queue
+    /// A new `CommandConfigurator` with an initialized command queue
     pub(crate) fn init_v2(dev: &Dev, req_buf: DmaBuf, resp_buf: DmaBuf) -> io::Result<Self> {
         let mut req_queue = CmdQueue::new(DescRingBuffer::new(req_buf.buf));
         let mut resp_queue = CmdRespQueue::new(DescRingBuffer::new(resp_buf.buf));
@@ -95,7 +94,7 @@ impl<Dev: DeviceAdaptor> CommandController<Dev> {
     }
 }
 
-impl<Dev: DeviceAdaptor> DeviceCommand for CommandController<Dev> {
+impl<Dev: DeviceAdaptor> DeviceCommand for CommandConfigurator<Dev> {
     fn update_mtt(&self, update: MttUpdate) -> io::Result<()> {
         let update_mr_table = CmdQueueReqDescUpdateMrTable::new(
             0,

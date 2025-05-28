@@ -11,7 +11,7 @@ use qp_attr::{IbvQpAttr, IbvQpInitAttr};
 use crate::{
     ack_responder::AckResponder,
     ack_timeout::QpAckTimeoutWorker,
-    cmd_controller::CommandController,
+    cmd::CommandConfigurator,
     completion::{
         Completion, CompletionQueueTable, CompletionTask, CompletionWorker, CqManager, Event,
         PostRecvEvent,
@@ -71,7 +71,7 @@ pub(crate) struct HwDeviceCtx<H: HwDevice> {
     qp_manager: QpManager,
     cq_manager: CqManager,
     cq_table: CompletionQueueTable,
-    cmd_controller: CommandController<H::Adaptor>,
+    cmd_controller: CommandConfigurator<H::Adaptor>,
     post_recv_tx_table: PostRecvTxTable,
     recv_wr_queue_table: RecvWrQueueTable,
     rdma_write_tx: flume::Sender<RdmaWriteTask>,
@@ -94,7 +94,7 @@ where
         let mut allocator = device.new_dma_buf_allocator()?;
         let mut rb_allocator = DescRingBufAllocator::new(&mut allocator);
         let cmd_controller =
-            CommandController::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)?;
+            CommandConfigurator::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)?;
         let send_scheduler = SendQueueScheduler::new();
         let send_bufs = iter::repeat_with(|| rb_allocator.alloc())
             .take(mode.num_channel())
