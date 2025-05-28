@@ -68,6 +68,50 @@ impl WorkReqSend for SendQueueScheduler {
     }
 }
 
+pub(crate) struct SendQueueSync<Dev> {
+    /// Queue for submitting send requests to the NIC
+    send_queue: SendQueue,
+    /// Csr proxy
+    csr_adaptor: SendQueueProxy<Dev>,
+}
+
+impl<Dev: DeviceAdaptor> SendQueueSync<Dev> {
+    pub(crate) fn new(send_queue: SendQueue, csr_adaptor: SendQueueProxy<Dev>) -> Self {
+        Self {
+            send_queue,
+            csr_adaptor,
+        }
+    }
+
+    fn send(&mut self, descs: Vec<SendQueueDesc>) -> bool {
+        if self.send_queue.remaining() < descs.len() {
+            self.sync_tail();
+        }
+        if self.send_queue.remaining() < descs.len() {
+            return false;
+        }
+        for desc in descs {
+            assert!(self.send_queue.push(desc), "full send queue");
+        }
+        self.sync_head();
+        true
+    }
+
+    fn sync_head(&mut self) {
+        self.csr_adaptor
+            .write_head(self.send_queue.head())
+            .expect("failed to write head csr");
+    }
+
+    fn sync_tail(&mut self) {
+        let tail_ptr = self
+            .csr_adaptor
+            .read_tail()
+            .expect("failed to read tail csr");
+        self.send_queue.set_tail(tail_ptr);
+    }
+}
+
 /// Worker thread for processing send work requests
 pub(crate) struct SendWorker<Dev> {
     /// id of the worker
@@ -78,10 +122,7 @@ pub(crate) struct SendWorker<Dev> {
     global: Arc<WrInjector>,
     /// Work stealers for taking work from other workers
     remotes: Box<[WrStealer]>,
-    /// Queue for submitting send requests to the NIC
-    send_queue: SendQueue,
-    /// Csr proxy
-    csr_adaptor: SendQueueProxy<Dev>,
+    sq: SendQueueSync<Dev>,
 }
 
 impl<Dev: DeviceAdaptor + Send + 'static> SendWorker<Dev> {
@@ -98,48 +139,42 @@ impl<Dev: DeviceAdaptor + Send + 'static> SendWorker<Dev> {
             let Some(wr) = Self::find_task(&self.local, &self.global, &self.remotes) else {
                 continue;
             };
-            let desc0 = SendQueueReqDescSeg0::new(
-                wr.opcode,
-                wr.msn,
-                wr.psn.into_inner(),
-                wr.qp_type,
-                wr.dqpn,
-                wr.flags,
-                wr.dqp_ip,
-                wr.raddr,
-                wr.rkey,
-                wr.total_len,
-            );
-            let desc1 = SendQueueReqDescSeg1::new(
-                wr.opcode,
-                wr.pmtu,
-                wr.is_first,
-                wr.is_last,
-                wr.is_retry,
-                wr.enable_ecn,
-                wr.sqpn,
-                wr.imm,
-                wr.mac_addr,
-                wr.lkey,
-                wr.len,
-                wr.laddr,
-            );
-
-            if !self.send_queue.push(SendQueueDesc::Seg0(desc0)) {
+            let descs = Self::build_desc(wr);
+            if !self.sq.send(descs) {
                 self.local.push(wr);
                 continue;
-            }
-            if !self.send_queue.push(SendQueueDesc::Seg1(desc1)) {
-                self.local.push(wr);
-                continue;
-            }
-            if self.csr_adaptor.write_head(self.send_queue.head()).is_err() {
-                error!("failed to flush queue pointer");
-            }
-            if let Ok(tail_ptr) = self.csr_adaptor.read_tail() {
-                self.send_queue.set_tail(tail_ptr);
             }
         }
+    }
+
+    fn build_desc(wr: WrChunk) -> Vec<SendQueueDesc> {
+        let desc0 = SendQueueReqDescSeg0::new(
+            wr.opcode,
+            wr.msn,
+            wr.psn.into_inner(),
+            wr.qp_type,
+            wr.dqpn,
+            wr.flags,
+            wr.dqp_ip,
+            wr.raddr,
+            wr.rkey,
+            wr.total_len,
+        );
+        let desc1 = SendQueueReqDescSeg1::new(
+            wr.opcode,
+            wr.pmtu,
+            wr.is_first,
+            wr.is_last,
+            wr.is_retry,
+            wr.enable_ecn,
+            wr.sqpn,
+            wr.imm,
+            wr.mac_addr,
+            wr.lkey,
+            wr.len,
+            wr.laddr,
+        );
+        vec![SendQueueDesc::Seg0(desc0), SendQueueDesc::Seg1(desc1)]
     }
 
     /// Find a task
@@ -183,12 +218,15 @@ where
         .take(send_queues.len())
         .collect();
     let stealers: Vec<_> = workers.iter().map(WrWorker::stealer).collect();
+    let sqs = send_queues
+        .into_iter()
+        .zip(sq_proxies)
+        .map(|(sq, proxy)| SendQueueSync::new(sq, proxy));
     workers
         .into_iter()
-        .zip(send_queues)
-        .zip(sq_proxies)
+        .zip(sqs)
         .enumerate()
-        .map(|(id, ((local, send_queue), csr_adaptor))| SendWorker {
+        .map(|(id, (local, sq))| SendWorker {
             id,
             local,
             global: Arc::clone(global_injector),
@@ -198,8 +236,7 @@ where
                 .enumerate()
                 .filter_map(|(i, x)| (i != id).then_some(x))
                 .collect(),
-            send_queue,
-            csr_adaptor,
+            sq,
         })
         .for_each(SendWorker::spawn);
 
