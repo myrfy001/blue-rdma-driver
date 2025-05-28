@@ -4,16 +4,30 @@ use log::error;
 
 use crate::{
     constants::PSN_MASK,
+    device::{proxy::MetaReportQueueProxy, CsrReaderAdaptor},
     protocol::{
         AckMetaLocalHw, AckMetaRemoteDriver, CnpMeta, HeaderReadMeta, HeaderWriteMeta, MetaReport,
         NakMetaLocalHw, NakMetaRemoteDriver, NakMetaRemoteHw, ReportMeta,
     },
+    queue::DescRingBuffer,
     utils::Psn,
 };
 
-use super::{
-    device::{proxy::MetaReportQueueProxy, CsrReaderAdaptor, DeviceAdaptor, RingBufferCsrAddr},
-    queue::meta_report_queue::{MetaReportQueue, MetaReportQueueDesc},
+use crate::{
+    ack_responder::AckResponse,
+    ack_timeout::AckTimeoutTask,
+    completion::CompletionTask,
+    descriptors::{
+        MetaReportQueueAckDesc, MetaReportQueueAckExtraDesc, MetaReportQueueDescFirst,
+        MetaReportQueueDescNext, MetaReportQueuePacketBasicInfoDesc,
+        MetaReportQueueReadReqExtendInfoDesc,
+    },
+    device::{
+        mode::Mode, proxy::build_meta_report_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor,
+    },
+    mem::DmaBuf,
+    packet_retransmit::PacketRetransmitTask,
+    rdma_write_worker::RdmaWriteTask,
 };
 
 pub(crate) struct MetaReportQueueCtx<Dev> {
@@ -138,5 +152,78 @@ impl<Dev: DeviceAdaptor> MetaReport for MetaReportQueueHandler<Dev> {
             return Ok(Some(meta));
         }
         Ok(None)
+    }
+}
+
+/// Meta report queue descriptors
+pub(crate) enum MetaReportQueueDesc {
+    /// Packet info for write operations
+    WritePacketInfo(MetaReportQueuePacketBasicInfoDesc),
+    /// Packet info for read operations
+    ReadPacketInfo(
+        (
+            MetaReportQueuePacketBasicInfoDesc,
+            MetaReportQueueReadReqExtendInfoDesc,
+        ),
+    ),
+    /// Packet info for congestion event
+    CnpPacketInfo(MetaReportQueuePacketBasicInfoDesc),
+    /// Ack
+    Ack(MetaReportQueueAckDesc),
+    /// Nak
+    Nak((MetaReportQueueAckDesc, MetaReportQueueAckExtraDesc)),
+}
+
+/// A transmit queue for the simple NIC device.
+pub(crate) struct MetaReportQueue {
+    /// Inner ring buffer
+    inner: DescRingBuffer,
+}
+
+impl MetaReportQueue {
+    pub(crate) fn new(inner: DescRingBuffer) -> Self {
+        Self { inner }
+    }
+
+    /// Tries to poll next valid entry from the queue
+    pub(crate) fn pop(&mut self) -> Option<MetaReportQueueDesc> {
+        let (first, next) = self.inner.pop_two();
+        #[allow(clippy::wildcard_enum_match_arm)] // too verbose
+        match (
+            first.map(MetaReportQueueDescFirst::from),
+            next.map(MetaReportQueueDescNext::from),
+        ) {
+            (None, None) => None,
+            (Some(MetaReportQueueDescFirst::PacketInfo(d)), None) if d.ecn_marked() => {
+                Some(MetaReportQueueDesc::CnpPacketInfo(d))
+            }
+            (Some(MetaReportQueueDescFirst::PacketInfo(d)), None) => {
+                Some(MetaReportQueueDesc::WritePacketInfo(d))
+            }
+            (Some(MetaReportQueueDescFirst::Ack(d)), None) => Some(MetaReportQueueDesc::Ack(d)),
+            (
+                Some(MetaReportQueueDescFirst::PacketInfo(f)),
+                Some(MetaReportQueueDescNext::ReadInfo(n)),
+            ) => Some(MetaReportQueueDesc::ReadPacketInfo((f, n))),
+            (
+                Some(MetaReportQueueDescFirst::Ack(f)),
+                Some(MetaReportQueueDescNext::AckExtra(n)),
+            ) => Some(MetaReportQueueDesc::Nak((f, n))),
+            _ => {
+                unreachable!("invalid descriptor format")
+            }
+        }
+    }
+
+    pub(crate) fn tail(&self) -> u32 {
+        self.inner.tail() as u32
+    }
+
+    pub(crate) fn set_head(&mut self, head: u32) {
+        self.inner.set_head(head);
+    }
+
+    pub(crate) fn remaining(&self) -> usize {
+        self.inner.remaining()
     }
 }

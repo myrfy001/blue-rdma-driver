@@ -22,12 +22,13 @@ use crate::{
         get_num_page, page::PageAllocator, pin_pages, virt_to_phy::AddressResolver, DmaBuf,
         DmaBufAllocator, MemoryPinner, PageWithPhysAddr, UmemHandler,
     },
+    meta_report,
     mtt::{Mtt, PgtEntry},
     net::config::NetworkConfig,
     packet_retransmit::PacketRetransmitWorker,
     protocol::{DeviceCommand, MttUpdate, PgtUpdate, RecvBufferMeta, SimpleNicTunnel, UpdateQp},
     qp::{QpManager, QueuePairAttrTable},
-    queue::{alloc::DescRingBufAllocator, meta_report_queue::init_and_spawn_meta_worker},
+    queue::alloc::DescRingBufAllocator,
     rdma_write_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
@@ -123,7 +124,7 @@ where
             rx_buffer,
         )?;
         spawn_send_workers(&adaptor, send_bufs, mode, &send_scheduler.injector())?;
-        init_and_spawn_meta_worker(
+        meta_report::spawn(
             &adaptor,
             meta_bufs,
             mode,

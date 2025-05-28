@@ -181,8 +181,7 @@ mod fragmenter;
 /// Memory operation components
 #[allow(unsafe_code)]
 mod mem;
-mod meta_report_queue;
-mod meta_worker;
+mod meta_report;
 /// Memory translation table
 mod mtt;
 mod packet_retransmit;
