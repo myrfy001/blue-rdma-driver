@@ -174,7 +174,7 @@ mod completion;
 mod config;
 /// Constants used throughout the driver
 mod constants;
-mod device_protocol;
+mod device;
 mod fragmenter;
 /// Memory operation components
 #[allow(unsafe_code)]
@@ -183,7 +183,7 @@ mod meta_worker;
 /// Memory translation table
 mod mtt;
 mod packet_retransmit;
-mod protocol_impl;
+mod protocol;
 mod qp;
 mod rdma_write_worker;
 mod recv;
@@ -191,6 +191,7 @@ mod ringbuf;
 /// Send Queue implementations
 mod send;
 mod sq_worker;
+mod test_csr_rw;
 mod utils;
 
 #[allow(unsafe_code)]
@@ -201,9 +202,9 @@ pub mod ctx_ops;
 /// Network implementations
 pub mod net;
 
-pub use protocol_impl::device::ffi_impl::BlueRdmaCore;
-pub use protocol_impl::test_csr_rw::TestDevice;
-pub use protocol_impl::SimpleNicDeviceConfig;
+pub use device::ffi_impl::BlueRdmaCore;
+pub use simple_nic::SimpleNicDeviceConfig;
+pub use test_csr_rw::TestDevice;
 
 pub mod bench_wrappers;
 pub mod test_wrapper;
