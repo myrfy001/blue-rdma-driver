@@ -28,14 +28,13 @@ use crate::{
     qp::{QpAttr, QpManager, QpTableShared, QueuePairAttrTable},
     rdma_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
-        post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
-        TcpChannel,
+        post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWrQueueTable, TcpChannel,
     },
     retransmit::PacketRetransmitWorker,
     ringbuf_desc::DescRingBufAllocator,
     send::{self, SendHandle},
     simple_nic::SimpleNicController,
-    wr::{SendWr, SendWrBase, SendWrRdma},
+    types::{RecvWr, SendWr, SendWrBase, SendWrRdma},
 };
 
 use super::{mode::Mode, DeviceAdaptor};

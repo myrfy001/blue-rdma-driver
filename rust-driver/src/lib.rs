@@ -195,8 +195,8 @@ mod ringbuf;
 mod ringbuf_desc;
 mod send;
 mod simple_nic;
+mod types;
 mod utils;
-mod wr;
 
 pub use device::ffi::BlueRdmaCore;
 pub use simple_nic::SimpleNicDeviceConfig;

@@ -7,8 +7,8 @@ use crate::{
     fragmenter::WrPacketFragmenter,
     qp::{qpn_index, QpTable},
     send::{QpParams, SendHandle, WorkReqOpCode},
+    types::SendWrRdma,
     utils::Psn,
-    wr::SendWrRdma,
 };
 
 #[allow(variant_size_differences)]

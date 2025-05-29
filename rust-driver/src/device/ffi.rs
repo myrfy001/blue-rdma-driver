@@ -13,8 +13,7 @@ use crate::{
         EmulatedUmemHandler,
     },
     net::config::{MacAddress, NetworkConfig},
-    recv::RecvWr,
-    wr::SendWr,
+    types::{RecvWr, SendWr},
 };
 
 use super::{

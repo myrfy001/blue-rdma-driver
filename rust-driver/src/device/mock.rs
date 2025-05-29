@@ -37,9 +37,8 @@ use crate::{
         DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
     qp::{qpn_index, QpTable},
-    recv::RecvWr,
     send::WorkReqOpCode,
-    wr::SendWr,
+    types::{RecvWr, SendWr},
 };
 
 use super::{
@@ -774,7 +773,7 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
-    use crate::wr::{SendWrBase, SendWrRdma};
+    use crate::types::{SendWrBase, SendWrRdma};
 
     use super::*;
     use bincode::{Decode, Encode};

@@ -20,8 +20,8 @@ use crate::{
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     send::WorkReqOpCode,
+    types::{SendWrBase, SendWrRdma},
     utils::Psn,
-    wr::{SendWrBase, SendWrRdma},
 };
 
 use super::types::{

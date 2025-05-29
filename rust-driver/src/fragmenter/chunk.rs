@@ -2,8 +2,8 @@ use crate::{
     constants::PSN_MASK,
     qp::convert_ibv_mtu_to_u16,
     send::{QpParams, WithIbvParams, WrChunk, WrChunkBuilder},
+    types::SendWrRdma,
     utils::Psn,
-    wr::SendWrRdma,
 };
 
 use super::Fragmenter;

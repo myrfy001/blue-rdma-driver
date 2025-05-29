@@ -10,8 +10,8 @@ use crate::{
     qp::{num_psn, QpAttr, QpTable, QpTableShared, QueuePairAttrTable, SqContext},
     retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
+    types::SendWrRdma,
     utils::Psn,
-    wr::SendWrRdma,
 };
 
 #[derive(Debug)]

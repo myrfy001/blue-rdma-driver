@@ -307,3 +307,49 @@ impl ValidationError {
         Self::Unimplemented(value.to_string())
     }
 }
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+pub(crate) struct RecvWr {
+    pub(crate) wr_id: u64,
+    pub(crate) addr: u64,
+    pub(crate) length: u32,
+    pub(crate) lkey: u32,
+}
+
+impl RecvWr {
+    #[allow(unsafe_code)]
+    pub(crate) fn new(wr: ibverbs_sys::ibv_recv_wr) -> Option<Self> {
+        let num_sge = usize::try_from(wr.num_sge).ok()?;
+        if num_sge != 1 {
+            return None;
+        }
+        // SAFETY: sg_list is valid when num_sge > 0, which we've verified above
+        let sge = unsafe { *wr.sg_list };
+
+        Some(Self {
+            wr_id: wr.wr_id,
+            addr: sge.addr,
+            length: sge.length,
+            lkey: sge.lkey,
+        })
+    }
+
+    pub(crate) fn to_bytes(self) -> [u8; size_of::<RecvWr>()] {
+        let mut bytes = [0u8; 24];
+        bytes[0..8].copy_from_slice(&self.wr_id.to_be_bytes());
+        bytes[8..16].copy_from_slice(&self.addr.to_be_bytes());
+        bytes[16..20].copy_from_slice(&self.length.to_be_bytes());
+        bytes[20..24].copy_from_slice(&self.lkey.to_be_bytes());
+        bytes
+    }
+
+    #[allow(clippy::unwrap_used)]
+    pub(crate) fn from_bytes(bytes: &[u8; size_of::<RecvWr>()]) -> Self {
+        Self {
+            wr_id: u64::from_be_bytes(bytes[0..8].try_into().unwrap()),
+            addr: u64::from_be_bytes(bytes[8..16].try_into().unwrap()),
+            length: u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
+            lkey: u32::from_be_bytes(bytes[20..24].try_into().unwrap()),
+        }
+    }
+}
