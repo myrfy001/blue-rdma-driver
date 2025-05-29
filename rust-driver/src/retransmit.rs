@@ -5,8 +5,9 @@ use log::debug;
 use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
     fragmenter::WrPacketFragmenter,
+    qp::{qpn_index, QpTable},
     send::{QpParams, SendHandle, WorkReqOpCode},
-    utils::{qpn_index, Psn, QpTable},
+    utils::Psn,
     wr::SendWrRdma,
 };
 

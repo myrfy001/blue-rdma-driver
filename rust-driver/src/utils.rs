@@ -103,58 +103,6 @@ impl Display for Psn {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct QpTable<T> {
-    inner: Box<[T]>,
-}
-
-impl<T> QpTable<T> {
-    pub(crate) fn new_with<F: FnMut() -> T>(f: F) -> Self {
-        Self {
-            inner: iter::repeat_with(f).take(MAX_QP_CNT).collect(),
-        }
-    }
-
-    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
-        self.inner.iter()
-    }
-
-    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
-        self.inner.iter_mut()
-    }
-
-    pub(crate) fn get_qp(&self, qpn: u32) -> Option<&T> {
-        self.inner.get(qpn_index(qpn))
-    }
-
-    pub(crate) fn get_qp_mut(&mut self, qpn: u32) -> Option<&mut T> {
-        self.inner.get_mut(qpn_index(qpn))
-    }
-
-    pub(crate) fn map_qp<R, F>(&self, qpn: u32, f: F) -> Option<R>
-    where
-        F: FnMut(&T) -> R,
-    {
-        self.inner.get(qpn_index(qpn)).map(f)
-    }
-
-    pub(crate) fn map_qp_mut<R, F>(&mut self, qpn: u32, f: F) -> Option<R>
-    where
-        F: FnOnce(&mut T) -> R,
-    {
-        self.inner.get_mut(qpn_index(qpn)).map(f)
-    }
-
-    pub(crate) fn replace(&mut self, qpn: u32, mut t: T) -> Option<T> {
-        if let Some(x) = self.inner.get_mut(qpn_index(qpn)) {
-            mem::swap(x, &mut t);
-            Some(t)
-        } else {
-            None
-        }
-    }
-}
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Msn(pub(crate) u16);
 
@@ -194,23 +142,6 @@ impl Sub for Msn {
     fn sub(self, rhs: Self) -> Self::Output {
         Self(self.0.sub(rhs.0))
     }
-}
-
-impl<T: Default> QpTable<T> {
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl<T: Default> Default for QpTable<T> {
-    fn default() -> Self {
-        Self::new_with(T::default)
-    }
-}
-
-#[allow(clippy::as_conversions)] // u32 to usize
-pub(crate) fn qpn_index(qpn: u32) -> usize {
-    (qpn >> QPN_KEY_PART_WIDTH) as usize
 }
 
 #[cfg(test)]

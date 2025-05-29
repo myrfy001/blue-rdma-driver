@@ -8,8 +8,8 @@ use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
     constants::MAX_CQ_CNT,
-    qp::QueuePairAttrTable,
-    utils::{Msn, Psn, QpTable},
+    qp::{QpAttr, QpTable, QpTableShared, QueuePairAttrTable},
+    utils::{Msn, Psn},
 };
 
 struct EventRegister {
@@ -54,7 +54,7 @@ pub(crate) struct CompletionWorker {
     completion_rx: flume::Receiver<CompletionTask>,
     tracker_table: QpTable<QueuePairMessageTracker>,
     cq_table: CompletionQueueTable,
-    qp_table: QueuePairAttrTable,
+    qp_table: QpTableShared<QpAttr>,
     ack_resp_tx: flume::Sender<AckResponse>,
     ack_timeout_tx: flume::Sender<AckTimeoutTask>,
 }
@@ -63,7 +63,7 @@ impl CompletionWorker {
     pub(crate) fn new(
         completion_rx: flume::Receiver<CompletionTask>,
         cq_table: CompletionQueueTable,
-        qp_table: QueuePairAttrTable,
+        qp_table: QpTableShared<QpAttr>,
         ack_resp_tx: flume::Sender<AckResponse>,
         ack_timeout_tx: flume::Sender<AckTimeoutTask>,
     ) -> Self {
@@ -94,7 +94,7 @@ impl CompletionWorker {
             let Some(tracker) = self.tracker_table.get_qp_mut(qpn) else {
                 continue;
             };
-            let Some(qp_attr) = self.qp_table.get(qpn) else {
+            let Some(qp_attr) = self.qp_table.get_qp(qpn) else {
                 continue;
             };
             match x {

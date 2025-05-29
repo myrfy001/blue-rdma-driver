@@ -7,10 +7,10 @@ use crate::{
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
-    qp::{num_psn, QueuePairAttrTable, SqContext},
+    qp::{num_psn, QpAttr, QpTable, QpTableShared, QueuePairAttrTable, SqContext},
     retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
-    utils::{Psn, QpTable},
+    utils::Psn,
     wr::SendWrRdma,
 };
 
@@ -40,7 +40,7 @@ impl RdmaWriteTask {
 
 pub(crate) struct RdmaWriteWorker {
     sq_ctx_table: QpTable<SqContext>,
-    qp_attr_table: QueuePairAttrTable,
+    qp_attr_table: QpTableShared<QpAttr>,
     send_handle: SendHandle,
     rdma_write_rx: flume::Receiver<RdmaWriteTask>,
     timeout_tx: flume::Sender<AckTimeoutTask>,
@@ -51,7 +51,7 @@ pub(crate) struct RdmaWriteWorker {
 impl RdmaWriteWorker {
     pub(crate) fn new(
         rdma_write_rx: flume::Receiver<RdmaWriteTask>,
-        qp_attr_table: QueuePairAttrTable,
+        qp_attr_table: QpTableShared<QpAttr>,
         send_handle: SendHandle,
         timeout_tx: flume::Sender<AckTimeoutTask>,
         retransmit_tx: flume::Sender<PacketRetransmitTask>,
@@ -103,7 +103,7 @@ impl RdmaWriteWorker {
     fn rdma_read(&mut self, qpn: u32, wr: SendWrRdma) -> io::Result<()> {
         let qp = self
             .qp_attr_table
-            .get(qpn)
+            .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
 
         let addr = wr.raddr();
@@ -171,7 +171,7 @@ impl RdmaWriteWorker {
     fn write(&mut self, qpn: u32, wr: SendWrRdma) -> io::Result<()> {
         let qp = self
             .qp_attr_table
-            .get(qpn)
+            .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
         let addr = wr.raddr();
         let length = wr.length();

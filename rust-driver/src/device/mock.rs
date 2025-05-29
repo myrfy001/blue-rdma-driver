@@ -36,9 +36,9 @@ use crate::{
         virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
         DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
+    qp::{qpn_index, QpTable},
     recv::RecvWr,
     send::WorkReqOpCode,
-    utils::{qpn_index, QpTable},
     wr::SendWr,
 };
 

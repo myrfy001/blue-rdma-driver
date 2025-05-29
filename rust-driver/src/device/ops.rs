@@ -25,7 +25,7 @@ use crate::{
     meta_report,
     mtt::{Mtt, PgtEntry},
     net::config::NetworkConfig,
-    qp::{QpManager, QueuePairAttrTable},
+    qp::{QpAttr, QpManager, QpTableShared, QueuePairAttrTable},
     rdma_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWr, RecvWrQueueTable,
@@ -68,6 +68,7 @@ pub(crate) struct HwDeviceCtx<H: HwDevice> {
     mtt: Mtt,
     mtt_buffer: DmaBuf,
     qp_manager: QpManager,
+    qp_attr_table: QpTableShared<QpAttr>,
     cq_manager: CqManager,
     cq_table: CompletionQueueTable,
     cmd_controller: CommandConfigurator<H::Adaptor>,
@@ -109,8 +110,8 @@ where
         let (rdma_write_tx, rdma_write_rx) = flume::unbounded();
         let rx_buffer = rb_allocator.alloc()?;
         let rx_buffer_pa = rx_buffer.phys_addr;
-        let qp_attr_table = QueuePairAttrTable::new();
-        let qp_manager = QpManager::new(qp_attr_table.clone_arc());
+        let qp_attr_table = QpTableShared::new();
+        let qp_manager = QpManager::new();
         let cq_manager = CqManager::new();
         let cq_table = CompletionQueueTable::new();
 
@@ -136,7 +137,7 @@ where
         CompletionWorker::new(
             completion_rx,
             cq_table.clone_arc(),
-            qp_attr_table.clone_arc(),
+            qp_attr_table.clone(),
             ack_tx,
             ack_timeout_tx.clone(),
         )
@@ -147,7 +148,7 @@ where
         let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
         #[allow(clippy::mem_forget)]
         std::mem::forget(simple_nic_rx); // prevent libc::munmap being called
-        AckResponder::new(qp_attr_table.clone_arc(), ack_rx, Box::new(simple_nic_tx)).spawn();
+        AckResponder::new(qp_attr_table.clone(), ack_rx, Box::new(simple_nic_tx)).spawn();
         QpAckTimeoutWorker::new(
             ack_timeout_rx,
             packet_retransmit_tx.clone(),
@@ -158,7 +159,7 @@ where
         PacketRetransmitWorker::new(packet_retransmit_rx, handle.clone()).spawn();
         RdmaWriteWorker::new(
             rdma_write_rx,
-            qp_attr_table,
+            qp_attr_table.clone(),
             handle,
             ack_timeout_tx,
             packet_retransmit_tx,
@@ -170,6 +171,7 @@ where
             device,
             cmd_controller,
             qp_manager,
+            qp_attr_table,
             cq_manager,
             cq_table,
             mtt_buffer: rb_allocator.alloc()?,
@@ -286,7 +288,7 @@ where
             .qp_manager
             .create_qp()
             .ok_or(io::Error::from(io::ErrorKind::WouldBlock))?;
-        let _ignore = self.qp_manager.update_qp(qpn, |current| {
+        let _ignore = self.qp_attr_table.map_qp_mut(qpn, |current| {
             current.qpn = qpn;
             current.qp_type = attr.qp_type();
             current.send_cq = attr.send_cq();
@@ -309,8 +311,8 @@ where
 
     fn update_qp(&mut self, qpn: u32, attr: IbvQpAttr) -> io::Result<()> {
         let entry = self
-            .qp_manager
-            .update_qp(qpn, |current| {
+            .qp_attr_table
+            .map_qp_mut(qpn, |current| {
                 let entry = UpdateQp {
                     qpn,
                     ip_addr: CARD_IP_ADDRESS,
@@ -334,7 +336,7 @@ where
         self.cmd_controller.update_qp(entry);
 
         let qp = self
-            .qp_manager
+            .qp_attr_table
             .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::NotFound))?;
         if qp.dqpn != 0 && qp.dqp_ip != 0 && self.post_recv_tx_table.get_qp_mut(qpn).is_none() {
@@ -388,7 +390,7 @@ where
 
     fn post_recv(&mut self, qpn: u32, wr: RecvWr) -> io::Result<()> {
         let qp = self
-            .qp_manager
+            .qp_attr_table
             .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
         let event = Event::PostRecv(PostRecvEvent::new(qpn, wr.wr_id));

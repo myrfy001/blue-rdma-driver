@@ -16,10 +16,11 @@ use crate::{
     ack_tracker::{LocalAckTracker, RemoteAckTracker},
     completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
     device::DeviceAdaptor,
+    qp::QpTable,
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     send::WorkReqOpCode,
-    utils::{Psn, QpTable},
+    utils::Psn,
     wr::{SendWrBase, SendWrRdma},
 };
 

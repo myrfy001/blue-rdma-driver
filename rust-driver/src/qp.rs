@@ -1,5 +1,5 @@
 use std::{
-    iter,
+    iter, mem,
     sync::{
         atomic::{AtomicU16, AtomicU32, AtomicU8, Ordering},
         Arc,
@@ -18,7 +18,7 @@ use crate::{
 };
 
 #[derive(Default, Clone, Copy)]
-pub(crate) struct QueuePairAttr {
+pub(crate) struct QpAttr {
     pub(crate) qp_type: u8,
     pub(crate) qpn: u32,
     pub(crate) dqpn: u32,
@@ -31,7 +31,7 @@ pub(crate) struct QueuePairAttr {
 }
 
 pub(crate) struct QueuePairAttrTable {
-    inner: Arc<[RwLock<QueuePairAttr>]>,
+    inner: Arc<[RwLock<QpAttr>]>,
 }
 
 impl QueuePairAttrTable {
@@ -49,14 +49,14 @@ impl QueuePairAttrTable {
         }
     }
 
-    pub(crate) fn get(&self, qpn: u32) -> Option<QueuePairAttr> {
+    pub(crate) fn get(&self, qpn: u32) -> Option<QpAttr> {
         let index = index(qpn);
         self.inner.get(index).map(|x| *x.read())
     }
 
     pub(crate) fn map_qp<F, T>(&self, qpn: u32, mut f: F) -> Option<T>
     where
-        F: FnMut(&QueuePairAttr) -> T,
+        F: FnMut(&QpAttr) -> T,
     {
         let index = index(qpn);
         self.inner.get(index).map(|x| f(&x.read()))
@@ -64,7 +64,7 @@ impl QueuePairAttrTable {
 
     pub(crate) fn map_qp_mut<F, T>(&self, qpn: u32, mut f: F) -> Option<T>
     where
-        F: FnMut(&mut QueuePairAttr) -> T,
+        F: FnMut(&mut QpAttr) -> T,
     {
         let index = index(qpn);
         self.inner.get(index).map(|x| f(&mut x.write()))
@@ -75,18 +75,16 @@ impl QueuePairAttrTable {
 pub(crate) struct QpManager {
     /// Bitmap tracking allocated QPNs
     bitmap: BitVec,
-    /// QP table
-    table: QueuePairAttrTable,
 }
 
 #[allow(clippy::as_conversions, clippy::indexing_slicing)]
 impl QpManager {
     /// Creates a new `QpManager`
-    pub(crate) fn new(table: QueuePairAttrTable) -> Self {
+    pub(crate) fn new() -> Self {
         let mut bitmap = BitVec::with_capacity(MAX_QP_CNT);
         bitmap.resize(MAX_QP_CNT, false);
         bitmap.set(0, true);
-        Self { bitmap, table }
+        Self { bitmap }
     }
 
     /// Allocates a new QP and returns its QPN
@@ -106,25 +104,6 @@ impl QpManager {
             return;
         }
         self.bitmap.set(index, false);
-    }
-
-    pub(crate) fn get_qp(&self, qpn: u32) -> Option<QueuePairAttr> {
-        let index = index(qpn);
-        if !self.bitmap.get(index).is_some_and(|x| *x) {
-            return None;
-        }
-        self.table.get(qpn)
-    }
-
-    pub(crate) fn update_qp<F, T>(&self, qpn: u32, mut f: F) -> Option<T>
-    where
-        F: FnMut(&mut QueuePairAttr) -> T,
-    {
-        let index = index(qpn);
-        if !self.bitmap.get(index).is_some_and(|x| *x) {
-            return None;
-        }
-        self.table.map_qp_mut(qpn, f)
     }
 }
 
@@ -198,4 +177,139 @@ pub(crate) fn convert_ibv_mtu_to_u16(ibv_mtu: u8) -> Option<u16> {
         _ => return None,
     };
     Some(pmtu)
+}
+
+#[derive(Debug)]
+pub(crate) struct QpTable<T> {
+    inner: Box<[T]>,
+}
+
+impl<T> QpTable<T> {
+    pub(crate) fn new_with<F: FnMut() -> T>(f: F) -> Self {
+        Self {
+            inner: iter::repeat_with(f).take(MAX_QP_CNT).collect(),
+        }
+    }
+
+    pub(crate) fn iter(&self) -> impl Iterator<Item = &T> {
+        self.inner.iter()
+    }
+
+    pub(crate) fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.inner.iter_mut()
+    }
+
+    pub(crate) fn get_qp(&self, qpn: u32) -> Option<&T> {
+        self.inner.get(qpn_index(qpn))
+    }
+
+    pub(crate) fn get_qp_mut(&mut self, qpn: u32) -> Option<&mut T> {
+        self.inner.get_mut(qpn_index(qpn))
+    }
+
+    pub(crate) fn map_qp<R, F>(&self, qpn: u32, f: F) -> Option<R>
+    where
+        F: FnMut(&T) -> R,
+    {
+        self.inner.get(qpn_index(qpn)).map(f)
+    }
+
+    pub(crate) fn map_qp_mut<R, F>(&mut self, qpn: u32, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        self.inner.get_mut(qpn_index(qpn)).map(f)
+    }
+
+    pub(crate) fn replace(&mut self, qpn: u32, mut t: T) -> Option<T> {
+        if let Some(x) = self.inner.get_mut(qpn_index(qpn)) {
+            mem::swap(x, &mut t);
+            Some(t)
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: Default> QpTable<T> {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<T: Default> Default for QpTable<T> {
+    fn default() -> Self {
+        Self::new_with(T::default)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct QpTableShared<T> {
+    inner: Arc<[Mutex<T>]>,
+}
+
+impl<T> QpTableShared<T> {
+    pub(crate) fn new_with<F: FnMut() -> T>(f: F) -> Self {
+        Self {
+            inner: iter::repeat_with(f)
+                .take(MAX_QP_CNT)
+                .map(Mutex::new)
+                .collect(),
+        }
+    }
+
+    pub(crate) fn for_each<F: FnMut(&T)>(&self, mut f: F) {
+        self.inner.iter().for_each(|x| f(&x.lock()));
+    }
+
+    pub(crate) fn for_each_mut<F: FnMut(&mut T)>(&self, mut f: F) {
+        self.inner.iter().for_each(|x| f(&mut x.lock()));
+    }
+
+    pub(crate) fn get_qp(&self, qpn: u32) -> Option<T>
+    where
+        T: Copy,
+    {
+        self.inner.get(qpn_index(qpn)).map(|x| *x.lock())
+    }
+
+    pub(crate) fn map_qp<R, F>(&self, qpn: u32, mut f: F) -> Option<R>
+    where
+        F: FnMut(&T) -> R,
+    {
+        self.inner.get(qpn_index(qpn)).map(|x| f(&x.lock()))
+    }
+
+    pub(crate) fn map_qp_mut<R, F>(&self, qpn: u32, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut T) -> R,
+    {
+        self.inner.get(qpn_index(qpn)).map(|x| f(&mut x.lock()))
+    }
+
+    pub(crate) fn replace(&self, qpn: u32, mut t: T) -> Option<T> {
+        if let Some(x) = self.inner.get(qpn_index(qpn)) {
+            mem::swap(&mut *x.lock(), &mut t);
+            Some(t)
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: Default> QpTableShared<T> {
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl<T: Default> Default for QpTableShared<T> {
+    fn default() -> Self {
+        Self::new_with(T::default)
+    }
+}
+
+#[allow(clippy::as_conversions)] // u32 to usize
+pub(crate) fn qpn_index(qpn: u32) -> usize {
+    (qpn >> QPN_KEY_PART_WIDTH) as usize
 }

@@ -10,7 +10,7 @@ use bincode::{Decode, Encode};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::{utils::qpn_index, utils::QpTable};
+use crate::qp::{qpn_index, QpTable};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub(crate) struct RecvWr {

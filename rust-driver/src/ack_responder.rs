@@ -14,7 +14,7 @@ use pnet::{
 
 use crate::{
     constants::{CARD_IP_ADDRESS, PSN_MASK},
-    qp::QueuePairAttrTable,
+    qp::{QpAttr, QpTableShared, QueuePairAttrTable},
     simple_nic::FrameTx,
     utils::Psn,
 };
@@ -42,14 +42,14 @@ impl AckResponse {
 }
 
 pub(crate) struct AckResponder {
-    qp_table: QueuePairAttrTable,
+    qp_table: QpTableShared<QpAttr>,
     rx: flume::Receiver<AckResponse>,
     raw_frame_tx: Box<dyn FrameTx + Send + 'static>,
 }
 
 impl AckResponder {
     pub(crate) fn new(
-        qp_table: QueuePairAttrTable,
+        qp_table: QpTableShared<QpAttr>,
         rx: flume::Receiver<AckResponse>,
         raw_frame_tx: Box<dyn FrameTx + Send + 'static>,
     ) -> Self {
@@ -70,7 +70,7 @@ impl AckResponder {
     fn run(mut self) {
         const NUM_BITS_STRIDE: u8 = 16;
         while let Ok(x) = self.rx.recv() {
-            let Some(dqpn) = self.qp_table.get(x.qpn()).map(|attr| attr.dqpn) else {
+            let Some(dqpn) = self.qp_table.get_qp(x.qpn()).map(|attr| attr.dqpn) else {
                 error!("invalid qpn");
                 continue;
             };

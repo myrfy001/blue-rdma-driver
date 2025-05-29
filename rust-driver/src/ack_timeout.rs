@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     constants::{MAX_QP_CNT, QPN_KEY_PART_WIDTH},
+    qp::{qpn_index, QpTable},
     retransmit::PacketRetransmitTask,
     send::SendHandle,
-    utils::{qpn_index, QpTable},
 };
 
 const DEFAULT_INIT_RETRY_COUNT: usize = 5;
