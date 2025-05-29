@@ -10,6 +10,7 @@ use crate::{
     qp::{num_psn, QpAttr, QpTable, QpTableShared, QueuePairAttrTable, SqContext},
     retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
+    spawner::{SingleThreadTaskWorker, TaskTx},
     types::SendWrRdma,
     utils::Psn,
 };
@@ -42,61 +43,53 @@ pub(crate) struct RdmaWriteWorker {
     sq_ctx_table: QpTable<SqContext>,
     qp_attr_table: QpTableShared<QpAttr>,
     send_handle: SendHandle,
-    rdma_write_rx: flume::Receiver<RdmaWriteTask>,
-    timeout_tx: flume::Sender<AckTimeoutTask>,
-    retransmit_tx: flume::Sender<PacketRetransmitTask>,
-    completion_tx: flume::Sender<CompletionTask>,
+    timeout_tx: TaskTx<AckTimeoutTask>,
+    retransmit_tx: TaskTx<PacketRetransmitTask>,
+    completion_tx: TaskTx<CompletionTask>,
+}
+
+impl SingleThreadTaskWorker for RdmaWriteWorker {
+    type Task = RdmaWriteTask;
+
+    fn process(&mut self, task: Self::Task) {
+        match task {
+            RdmaWriteTask::Write { qpn, wr, resp_tx } => {
+                #[allow(clippy::wildcard_enum_match_arm)]
+                let resp = match wr.opcode() {
+                    WorkReqOpCode::RdmaWrite
+                    | WorkReqOpCode::RdmaWriteWithImm
+                    | WorkReqOpCode::Send
+                    | WorkReqOpCode::SendWithImm
+                    | WorkReqOpCode::RdmaReadResp => self.write(qpn, wr),
+                    WorkReqOpCode::RdmaRead => self.rdma_read(qpn, wr),
+                    _ => unreachable!("opcode unsupported"),
+                };
+                resp_tx.send(resp);
+            }
+            RdmaWriteTask::Ack { qpn, base_psn } => {
+                if let Some(ctx) = self.sq_ctx_table.get_qp_mut(qpn) {
+                    ctx.update_psn_acked(base_psn);
+                }
+            }
+        }
+    }
 }
 
 impl RdmaWriteWorker {
     pub(crate) fn new(
-        rdma_write_rx: flume::Receiver<RdmaWriteTask>,
         qp_attr_table: QpTableShared<QpAttr>,
         send_handle: SendHandle,
-        timeout_tx: flume::Sender<AckTimeoutTask>,
-        retransmit_tx: flume::Sender<PacketRetransmitTask>,
-        completion_tx: flume::Sender<CompletionTask>,
+        timeout_tx: TaskTx<AckTimeoutTask>,
+        retransmit_tx: TaskTx<PacketRetransmitTask>,
+        completion_tx: TaskTx<CompletionTask>,
     ) -> Self {
         Self {
-            rdma_write_rx,
             sq_ctx_table: QpTable::new(),
             qp_attr_table,
             send_handle,
             timeout_tx,
             retransmit_tx,
             completion_tx,
-        }
-    }
-
-    pub(crate) fn spawn(self) {
-        let _handle = std::thread::Builder::new()
-            .name("rdma-write-worker".into())
-            .spawn(move || self.run())
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
-    }
-
-    fn run(mut self) {
-        while let Ok(task) = self.rdma_write_rx.recv() {
-            match task {
-                RdmaWriteTask::Write { qpn, wr, resp_tx } => {
-                    #[allow(clippy::wildcard_enum_match_arm)]
-                    let resp = match wr.opcode() {
-                        WorkReqOpCode::RdmaWrite
-                        | WorkReqOpCode::RdmaWriteWithImm
-                        | WorkReqOpCode::Send
-                        | WorkReqOpCode::SendWithImm
-                        | WorkReqOpCode::RdmaReadResp => self.write(qpn, wr),
-                        WorkReqOpCode::RdmaRead => self.rdma_read(qpn, wr),
-                        _ => unreachable!("opcode unsupported"),
-                    };
-                    resp_tx.send(resp);
-                }
-                RdmaWriteTask::Ack { qpn, base_psn } => {
-                    if let Some(ctx) = self.sq_ctx_table.get_qp_mut(qpn) {
-                        ctx.update_psn_acked(base_psn);
-                    }
-                }
-            }
         }
     }
 

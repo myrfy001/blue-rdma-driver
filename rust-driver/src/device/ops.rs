@@ -2,6 +2,7 @@ use std::{
     io, iter,
     net::Ipv4Addr,
     sync::{atomic::AtomicBool, Arc},
+    time::Duration,
 };
 
 use crossbeam_deque::Worker;
@@ -34,6 +35,7 @@ use crate::{
     ringbuf_desc::DescRingBufAllocator,
     send::{self, SendHandle},
     simple_nic::SimpleNicController,
+    spawner::{AbortSignal, SingleThreadTaskWorker, TaskTx},
     types::{RecvWr, SendWr, SendWrBase, SendWrRdma},
 };
 
@@ -73,8 +75,8 @@ pub(crate) struct HwDeviceCtx<H: HwDevice> {
     cmd_controller: CommandConfigurator<H::Adaptor>,
     post_recv_tx_table: PostRecvTxTable,
     recv_wr_queue_table: RecvWrQueueTable,
-    rdma_write_tx: flume::Sender<RdmaWriteTask>,
-    completion_tx: flume::Sender<CompletionTask>,
+    rdma_write_tx: TaskTx<RdmaWriteTask>,
+    completion_tx: TaskTx<CompletionTask>,
     config: DeviceConfig,
     allocator: H::DmaBufAllocator,
 }
@@ -102,11 +104,7 @@ where
             .collect::<Result<_, _>>()?;
 
         let is_shutdown = Arc::new(AtomicBool::new(false));
-        let (completion_tx, completion_rx) = flume::unbounded();
-        let (ack_tx, ack_rx) = flume::unbounded();
-        let (ack_timeout_tx, ack_timeout_rx) = flume::unbounded();
-        let (packet_retransmit_tx, packet_retransmit_rx) = flume::unbounded();
-        let (rdma_write_tx, rdma_write_rx) = flume::unbounded();
+        let abort = AbortSignal::new();
         let rx_buffer = rb_allocator.alloc()?;
         let rx_buffer_pa = rx_buffer.phys_addr;
         let qp_attr_table = QpTableShared::new();
@@ -122,6 +120,33 @@ where
             rx_buffer,
         )?;
         let handle = send::spawn(&adaptor, send_bufs, mode)?;
+        let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
+        let ack_tx = AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx))
+            .spawn("AckResponder", abort.clone());
+        let packet_retransmit_tx = PacketRetransmitWorker::new(handle.clone())
+            .spawn("PacketRetransmitWorker", abort.clone());
+        let ack_timeout_tx =
+            QpAckTimeoutWorker::new(packet_retransmit_tx.clone(), handle.clone(), config.ack())
+                .spawn_polling(
+                    "QpAckTimeoutWorker",
+                    abort.clone(),
+                    Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
+                );
+        let completion_tx = CompletionWorker::new(
+            cq_table.clone_arc(),
+            qp_attr_table.clone(),
+            ack_tx.clone(),
+            ack_timeout_tx.clone(),
+        )
+        .spawn("CompletionWorker", abort.clone());
+        let rdma_write_tx = RdmaWriteWorker::new(
+            qp_attr_table.clone(),
+            handle,
+            ack_timeout_tx.clone(),
+            packet_retransmit_tx.clone(),
+            completion_tx.clone(),
+        )
+        .spawn("RdmaWriteWorker", abort.clone());
         meta_report::spawn(
             &adaptor,
             meta_bufs,
@@ -133,38 +158,11 @@ where
             rdma_write_tx.clone(),
             Arc::clone(&is_shutdown),
         )?;
-        CompletionWorker::new(
-            completion_rx,
-            cq_table.clone_arc(),
-            qp_attr_table.clone(),
-            ack_tx,
-            ack_timeout_tx.clone(),
-        )
-        .spawn();
         cmd_controller.set_network(config.network())?;
         cmd_controller.set_raw_packet_recv_buffer(RecvBufferMeta::new(rx_buffer_pa))?;
 
-        let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
         #[allow(clippy::mem_forget)]
         std::mem::forget(simple_nic_rx); // prevent libc::munmap being called
-        AckResponder::new(qp_attr_table.clone(), ack_rx, Box::new(simple_nic_tx)).spawn();
-        QpAckTimeoutWorker::new(
-            ack_timeout_rx,
-            packet_retransmit_tx.clone(),
-            handle.clone(),
-            config.ack(),
-        )
-        .spawn();
-        PacketRetransmitWorker::new(packet_retransmit_rx, handle.clone()).spawn();
-        RdmaWriteWorker::new(
-            rdma_write_rx,
-            qp_attr_table.clone(),
-            handle,
-            ack_timeout_tx,
-            packet_retransmit_tx,
-            completion_tx.clone(),
-        )
-        .spawn();
 
         Ok(Self {
             device,

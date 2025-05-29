@@ -9,6 +9,7 @@ use crate::{
     ack_timeout::AckTimeoutTask,
     constants::MAX_CQ_CNT,
     qp::{QpAttr, QpTable, QpTableShared, QueuePairAttrTable},
+    spawner::{SingleThreadTaskWorker, TaskTx},
     utils::{Msn, Psn},
 };
 
@@ -51,75 +52,67 @@ pub(crate) enum CompletionTask {
 }
 
 pub(crate) struct CompletionWorker {
-    completion_rx: flume::Receiver<CompletionTask>,
     tracker_table: QpTable<QueuePairMessageTracker>,
     cq_table: CompletionQueueTable,
     qp_table: QpTableShared<QpAttr>,
-    ack_resp_tx: flume::Sender<AckResponse>,
-    ack_timeout_tx: flume::Sender<AckTimeoutTask>,
+    ack_resp_tx: TaskTx<AckResponse>,
+    ack_timeout_tx: TaskTx<AckTimeoutTask>,
+}
+
+impl SingleThreadTaskWorker for CompletionWorker {
+    type Task = CompletionTask;
+
+    fn process(&mut self, task: Self::Task) {
+        let qpn = match task {
+            CompletionTask::Register { qpn, .. }
+            | CompletionTask::AckSend { qpn, .. }
+            | CompletionTask::AckRecv { qpn, .. } => qpn,
+        };
+        let Some(tracker) = self.tracker_table.get_qp_mut(qpn) else {
+            return;
+        };
+        let Some(qp_attr) = self.qp_table.get_qp(qpn) else {
+            return;
+        };
+        match task {
+            CompletionTask::Register { event, .. } => {
+                tracker.append(event);
+            }
+            CompletionTask::AckSend { base_psn, .. } => {
+                if let Some(send_cq) = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h)) {
+                    tracker.ack_send(Some(base_psn), send_cq, &self.ack_timeout_tx);
+                }
+            }
+            CompletionTask::AckRecv { base_psn, .. } => {
+                let send_cq = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h));
+                if let Some(recv_cq) = qp_attr.recv_cq.and_then(|h| self.cq_table.get_cq(h)) {
+                    tracker.ack_recv(
+                        base_psn,
+                        recv_cq,
+                        send_cq,
+                        qpn,
+                        &self.ack_resp_tx,
+                        &self.ack_timeout_tx,
+                    );
+                }
+            }
+        }
+    }
 }
 
 impl CompletionWorker {
     pub(crate) fn new(
-        completion_rx: flume::Receiver<CompletionTask>,
         cq_table: CompletionQueueTable,
         qp_table: QpTableShared<QpAttr>,
-        ack_resp_tx: flume::Sender<AckResponse>,
-        ack_timeout_tx: flume::Sender<AckTimeoutTask>,
+        ack_resp_tx: TaskTx<AckResponse>,
+        ack_timeout_tx: TaskTx<AckTimeoutTask>,
     ) -> Self {
         Self {
-            completion_rx,
             tracker_table: QpTable::new(),
             cq_table,
             qp_table,
             ack_resp_tx,
             ack_timeout_tx,
-        }
-    }
-
-    pub(crate) fn spawn(self) {
-        let _handle = std::thread::Builder::new()
-            .name("completion-worker".into())
-            .spawn(move || self.run())
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
-    }
-
-    fn run(mut self) {
-        while let Ok(x) = self.completion_rx.recv() {
-            let qpn = match x {
-                CompletionTask::Register { qpn, .. }
-                | CompletionTask::AckSend { qpn, .. }
-                | CompletionTask::AckRecv { qpn, .. } => qpn,
-            };
-            let Some(tracker) = self.tracker_table.get_qp_mut(qpn) else {
-                continue;
-            };
-            let Some(qp_attr) = self.qp_table.get_qp(qpn) else {
-                continue;
-            };
-            match x {
-                CompletionTask::Register { event, .. } => {
-                    tracker.append(event);
-                }
-                CompletionTask::AckSend { base_psn, .. } => {
-                    if let Some(send_cq) = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                        tracker.ack_send(Some(base_psn), send_cq, &self.ack_timeout_tx);
-                    }
-                }
-                CompletionTask::AckRecv { base_psn, .. } => {
-                    let send_cq = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h));
-                    if let Some(recv_cq) = qp_attr.recv_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                        tracker.ack_recv(
-                            base_psn,
-                            recv_cq,
-                            send_cq,
-                            qpn,
-                            &self.ack_resp_tx,
-                            &self.ack_timeout_tx,
-                        );
-                    }
-                }
-            }
         }
     }
 }
@@ -172,7 +165,7 @@ impl QueuePairMessageTracker {
         &mut self,
         psn: Option<Psn>,
         send_cq: &CompletionQueue,
-        ack_timeout_tx: &flume::Sender<AckTimeoutTask>,
+        ack_timeout_tx: &TaskTx<AckTimeoutTask>,
     ) {
         if let Some(psn) = psn {
             self.send.ack(psn);
@@ -209,8 +202,8 @@ impl QueuePairMessageTracker {
         recv_cq: &CompletionQueue,
         send_cq: Option<&CompletionQueue>,
         qpn: u32,
-        ack_resp_tx: &flume::Sender<AckResponse>,
-        ack_timeout_tx: &flume::Sender<AckTimeoutTask>,
+        ack_resp_tx: &TaskTx<AckResponse>,
+        ack_timeout_tx: &TaskTx<AckTimeoutTask>,
     ) {
         self.recv.ack(psn);
         while let Some(event) = self.recv.pop() {

@@ -11,6 +11,7 @@ use crate::{
     qp::{qpn_index, QpTable},
     retransmit::PacketRetransmitTask,
     send::SendHandle,
+    spawner::{SingleThreadTaskWorker, TaskTx},
 };
 
 const DEFAULT_INIT_RETRY_COUNT: usize = 5;
@@ -20,10 +21,10 @@ const DEFAULT_LOCAL_ACK_TIMEOUT: u8 = 4;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct AckTimeoutConfig {
     // 4.096 uS * 2^(CHECK DURATION)
-    check_duration_exp: u8,
+    pub(crate) check_duration_exp: u8,
     // 4.096 uS * 2^(Local ACK Timeout)
-    local_ack_timeout_exp: u8,
-    init_retry_count: usize,
+    pub(crate) local_ack_timeout_exp: u8,
+    pub(crate) init_retry_count: usize,
 }
 
 impl Default for AckTimeoutConfig {
@@ -153,8 +154,7 @@ pub(crate) enum TimerResult {
 }
 
 pub(crate) struct QpAckTimeoutWorker {
-    task_rx: flume::Receiver<AckTimeoutTask>,
-    packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
+    packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
     timer_table: QpTable<TransportTimer>,
     // TODO: maintain this value as atomic variable
     outstanding_ack_req_cnt: QpTable<usize>,
@@ -162,10 +162,54 @@ pub(crate) struct QpAckTimeoutWorker {
     config: AckTimeoutConfig,
 }
 
+impl SingleThreadTaskWorker for QpAckTimeoutWorker {
+    type Task = AckTimeoutTask;
+
+    fn process(&mut self, task: Self::Task) {
+        let qpn = task.qpn();
+        match task {
+            AckTimeoutTask::NewAckReq { qpn } => {
+                trace!("new ack req, qpn: {qpn}");
+                let _ignore = self.outstanding_ack_req_cnt.map_qp_mut(qpn, |x| *x += 1);
+                let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::restart);
+            }
+            AckTimeoutTask::RecvMeta { qpn } => {
+                trace!("recv meta, qpn: {qpn}");
+                let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::restart);
+            }
+            AckTimeoutTask::Ack { qpn } => {
+                if self
+                    .outstanding_ack_req_cnt
+                    .map_qp_mut(qpn, |x| {
+                        *x -= 1;
+                        trace!("ack, qpn: {qpn}, outstanding: {x}");
+                        *x == 0
+                    })
+                    .unwrap_or(false)
+                {
+                    let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::stop);
+                }
+            }
+        }
+        for (index, timer) in self.timer_table.iter_mut().enumerate() {
+            match timer.check_timeout() {
+                TimerResult::Ok => {}
+                TimerResult::Timeout => {
+                    warn!("timeout, qp index: {index}");
+                    // no need for exact qpn, as it will be later converted to index anyway
+                    let qpn = (index << QPN_KEY_PART_WIDTH) as u32;
+                    self.packet_retransmit_tx
+                        .send(PacketRetransmitTask::RetransmitAll { qpn });
+                }
+                TimerResult::RetryLimitExceeded => todo!("handle retry failures"),
+            }
+        }
+    }
+}
+
 impl QpAckTimeoutWorker {
     pub(crate) fn new(
-        task_rx: flume::Receiver<AckTimeoutTask>,
-        packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
+        packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
         wr_sender: SendHandle,
         config: AckTimeoutConfig,
     ) -> Self {
@@ -173,68 +217,11 @@ impl QpAckTimeoutWorker {
             TransportTimer::new(config.local_ack_timeout_exp, config.init_retry_count)
         });
         Self {
-            task_rx,
             packet_retransmit_tx,
             timer_table,
             wr_sender,
             config,
             outstanding_ack_req_cnt: QpTable::new(),
-        }
-    }
-
-    pub(crate) fn spawn(self) {
-        let _handle = thread::Builder::new()
-            .name("timer-worker".into())
-            .spawn(move || self.run())
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
-    }
-
-    #[allow(clippy::needless_pass_by_value)] // consume the flag
-    /// Run the handler loop
-    fn run(mut self) {
-        let check_duration_ns = Duration::from_nanos(4096u64 << self.config.check_duration_exp);
-        loop {
-            spin_sleep::sleep(check_duration_ns);
-            for task in self.task_rx.try_iter() {
-                let qpn = task.qpn();
-                match task {
-                    AckTimeoutTask::NewAckReq { qpn } => {
-                        trace!("new ack req, qpn: {qpn}");
-                        let _ignore = self.outstanding_ack_req_cnt.map_qp_mut(qpn, |x| *x += 1);
-                        let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::restart);
-                    }
-                    AckTimeoutTask::RecvMeta { qpn } => {
-                        trace!("recv meta, qpn: {qpn}");
-                        let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::restart);
-                    }
-                    AckTimeoutTask::Ack { qpn } => {
-                        if self
-                            .outstanding_ack_req_cnt
-                            .map_qp_mut(qpn, |x| {
-                                *x -= 1;
-                                trace!("ack, qpn: {qpn}, outstanding: {x}");
-                                *x == 0
-                            })
-                            .unwrap_or(false)
-                        {
-                            let _ignore = self.timer_table.map_qp_mut(qpn, TransportTimer::stop);
-                        }
-                    }
-                }
-            }
-            for (index, timer) in self.timer_table.iter_mut().enumerate() {
-                match timer.check_timeout() {
-                    TimerResult::Ok => {}
-                    TimerResult::Timeout => {
-                        warn!("timeout, qp index: {index}");
-                        // no need for exact qpn, as it will be later converted to index anyway
-                        let qpn = (index << QPN_KEY_PART_WIDTH) as u32;
-                        self.packet_retransmit_tx
-                            .send(PacketRetransmitTask::RetransmitAll { qpn });
-                    }
-                    TimerResult::RetryLimitExceeded => todo!("handle retry failures"),
-                }
-            }
         }
     }
 }

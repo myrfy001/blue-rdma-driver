@@ -20,6 +20,7 @@ use crate::{
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     ringbuf_desc::DescRingBuffer,
+    spawner::TaskTx,
 };
 
 pub(crate) use types::*;
@@ -29,11 +30,11 @@ pub(crate) fn spawn<Dev>(
     dev: &Dev,
     pages: Vec<DmaBuf>,
     mode: Mode,
-    ack_tx: flume::Sender<AckResponse>,
-    retransmit_tx: flume::Sender<AckTimeoutTask>,
-    packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
-    completion_tx: flume::Sender<CompletionTask>,
-    rdma_write_tx: flume::Sender<RdmaWriteTask>,
+    ack_tx: TaskTx<AckResponse>,
+    retransmit_tx: TaskTx<AckTimeoutTask>,
+    packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
+    completion_tx: TaskTx<CompletionTask>,
+    rdma_write_tx: TaskTx<RdmaWriteTask>,
     is_shutdown: Arc<AtomicBool>,
 ) -> io::Result<()>
 where

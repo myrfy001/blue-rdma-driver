@@ -20,6 +20,7 @@ use crate::{
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     send::WorkReqOpCode,
+    spawner::TaskTx,
     types::{SendWrBase, SendWrRdma},
     utils::Psn,
 };
@@ -65,20 +66,20 @@ impl<Dev: DeviceAdaptor + Send + 'static> MetaWorker<Dev> {
 pub(crate) struct MetaHandler {
     pub(super) send_table: QpTable<RemoteAckTracker>,
     pub(super) recv_table: QpTable<LocalAckTracker>,
-    pub(super) ack_tx: flume::Sender<AckResponse>,
-    pub(super) ack_timeout_tx: flume::Sender<AckTimeoutTask>,
-    pub(super) packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
-    pub(super) completion_tx: flume::Sender<CompletionTask>,
-    pub(super) rdma_write_tx: flume::Sender<RdmaWriteTask>,
+    pub(super) ack_tx: TaskTx<AckResponse>,
+    pub(super) ack_timeout_tx: TaskTx<AckTimeoutTask>,
+    pub(super) packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
+    pub(super) completion_tx: TaskTx<CompletionTask>,
+    pub(super) rdma_write_tx: TaskTx<RdmaWriteTask>,
 }
 
 impl MetaHandler {
     pub(crate) fn new(
-        ack_tx: flume::Sender<AckResponse>,
-        ack_timeout_tx: flume::Sender<AckTimeoutTask>,
-        packet_retransmit_tx: flume::Sender<PacketRetransmitTask>,
-        completion_tx: flume::Sender<CompletionTask>,
-        rdma_write_tx: flume::Sender<RdmaWriteTask>,
+        ack_tx: TaskTx<AckResponse>,
+        ack_timeout_tx: TaskTx<AckTimeoutTask>,
+        packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
+        completion_tx: TaskTx<CompletionTask>,
+        rdma_write_tx: TaskTx<RdmaWriteTask>,
     ) -> Self {
         Self {
             send_table: QpTable::new(),

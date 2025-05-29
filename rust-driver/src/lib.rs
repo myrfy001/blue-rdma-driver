@@ -195,6 +195,7 @@ mod ringbuf;
 mod ringbuf_desc;
 mod send;
 mod simple_nic;
+mod spawner;
 mod types;
 mod utils;
 

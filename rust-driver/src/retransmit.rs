@@ -7,6 +7,7 @@ use crate::{
     fragmenter::WrPacketFragmenter,
     qp::{qpn_index, QpTable},
     send::{QpParams, SendHandle, WorkReqOpCode},
+    spawner::SingleThreadTaskWorker,
     types::SendWrRdma,
     utils::Psn,
 };
@@ -45,80 +46,64 @@ impl PacketRetransmitTask {
 }
 
 pub(crate) struct PacketRetransmitWorker {
-    receiver: flume::Receiver<PacketRetransmitTask>,
     wr_sender: SendHandle,
     table: QpTable<IbvSendQueue>,
 }
 
-impl PacketRetransmitWorker {
-    pub(crate) fn new(
-        receiver: flume::Receiver<PacketRetransmitTask>,
-        wr_sender: SendHandle,
-    ) -> Self {
-        Self {
-            receiver,
-            wr_sender,
-            table: QpTable::new(),
-        }
-    }
+impl SingleThreadTaskWorker for PacketRetransmitWorker {
+    type Task = PacketRetransmitTask;
 
-    pub(crate) fn spawn(self) {
-        let _handle = thread::Builder::new()
-            .name("timer-worker".into())
-            .spawn(move || self.run())
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
-    }
+    fn process(&mut self, task: Self::Task) {
+        let qpn = task.qpn();
+        let Some(sq) = self.table.get_qp_mut(qpn) else {
+            return;
+        };
+        match task {
+            PacketRetransmitTask::NewWr { wr, .. } => {
+                sq.push(wr);
+            }
+            PacketRetransmitTask::RetransmitRange {
+                psn_low, psn_high, ..
+            } => {
+                debug!("retransmit range, qpn: {qpn}, low: {psn_low}, high: {psn_high}");
 
-    #[allow(clippy::needless_pass_by_value)] // consume the flag
-    /// Run the handler loop
-    fn run(mut self) {
-        while let Ok(task) = self.receiver.recv() {
-            let qpn = task.qpn();
-            let Some(sq) = self.table.get_qp_mut(qpn) else {
-                continue;
-            };
-            match task {
-                PacketRetransmitTask::NewWr { wr, .. } => {
-                    sq.push(wr);
-                }
-                PacketRetransmitTask::RetransmitRange {
-                    psn_low, psn_high, ..
-                } => {
-                    debug!("retransmit range, qpn: {qpn}, low: {psn_low}, high: {psn_high}");
-
-                    let sqes = sq.range(psn_low, psn_high);
-                    let packets = sqes
-                        .into_iter()
-                        .flat_map(|sqe| {
-                            WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn())
-                        })
-                        .skip_while(|x| x.psn < psn_low)
-                        .take_while(|x| x.psn < psn_high);
-                    for mut packet in packets {
-                        packet.set_is_retry();
-                        self.wr_sender.send(packet);
-                    }
-                }
-                PacketRetransmitTask::RetransmitAll { qpn } => {
-                    debug!("retransmit all, qpn: {qpn}");
-
-                    let packets = sq
-                        .inner
-                        .iter()
-                        .flat_map(|sqe| {
-                            WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn())
-                        })
-                        .skip_while(|x| x.psn < sq.base_psn);
-                    for mut packet in packets {
-                        packet.set_is_retry();
-                        self.wr_sender.send(packet);
-                    }
-                }
-
-                PacketRetransmitTask::Ack { psn, .. } => {
-                    sq.pop_until(psn);
+                let sqes = sq.range(psn_low, psn_high);
+                let packets = sqes
+                    .into_iter()
+                    .flat_map(|sqe| WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn()))
+                    .skip_while(|x| x.psn < psn_low)
+                    .take_while(|x| x.psn < psn_high);
+                for mut packet in packets {
+                    packet.set_is_retry();
+                    self.wr_sender.send(packet);
                 }
             }
+            PacketRetransmitTask::RetransmitAll { qpn } => {
+                debug!("retransmit all, qpn: {qpn}");
+
+                let packets = sq
+                    .inner
+                    .iter()
+                    .flat_map(|sqe| WrPacketFragmenter::new(sqe.wr(), sqe.qp_param(), sqe.psn()))
+                    .skip_while(|x| x.psn < sq.base_psn);
+                for mut packet in packets {
+                    packet.set_is_retry();
+                    self.wr_sender.send(packet);
+                }
+            }
+
+            PacketRetransmitTask::Ack { psn, .. } => {
+                sq.pop_until(psn);
+            }
+        }
+    }
+}
+
+impl PacketRetransmitWorker {
+    pub(crate) fn new(wr_sender: SendHandle) -> Self {
+        Self {
+            wr_sender,
+            table: QpTable::new(),
         }
     }
 }

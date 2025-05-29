@@ -16,6 +16,7 @@ use crate::{
     constants::{CARD_IP_ADDRESS, PSN_MASK},
     qp::{QpAttr, QpTableShared, QueuePairAttrTable},
     simple_nic::FrameTx,
+    spawner::SingleThreadTaskWorker,
     utils::Psn,
 };
 
@@ -43,58 +44,44 @@ impl AckResponse {
 
 pub(crate) struct AckResponder {
     qp_table: QpTableShared<QpAttr>,
-    rx: flume::Receiver<AckResponse>,
     raw_frame_tx: Box<dyn FrameTx + Send + 'static>,
+}
+
+impl SingleThreadTaskWorker for AckResponder {
+    type Task = AckResponse;
+
+    fn process(&mut self, task: Self::Task) {
+        const NUM_BITS_STRIDE: u8 = 16;
+        let Some(dqpn) = self.qp_table.get_qp(task.qpn()).map(|attr| attr.dqpn) else {
+            error!("invalid qpn");
+            return;
+        };
+        let frame = match task {
+            AckResponse::Ack { qpn, msn, last_psn } => {
+                AckFrameBuilder::build_ack(last_psn, u128::MAX, 0.into(), 0, dqpn, false, false)
+            }
+            AckResponse::Nak {
+                qpn,
+                base_psn,
+                ack_req_packet_psn,
+            } => {
+                AckFrameBuilder::build_ack(ack_req_packet_psn + 1, 0, base_psn, 0, dqpn, true, true)
+            }
+        };
+        if let Err(e) = self.raw_frame_tx.send(&frame) {
+            error!("failed to send ack frame");
+        }
+    }
 }
 
 impl AckResponder {
     pub(crate) fn new(
         qp_table: QpTableShared<QpAttr>,
-        rx: flume::Receiver<AckResponse>,
         raw_frame_tx: Box<dyn FrameTx + Send + 'static>,
     ) -> Self {
         Self {
             qp_table,
-            rx,
             raw_frame_tx,
-        }
-    }
-
-    pub(crate) fn spawn(self) {
-        let _handle = std::thread::Builder::new()
-            .name("ack-responder-worker".into())
-            .spawn(move || self.run())
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
-    }
-
-    fn run(mut self) {
-        const NUM_BITS_STRIDE: u8 = 16;
-        while let Ok(x) = self.rx.recv() {
-            let Some(dqpn) = self.qp_table.get_qp(x.qpn()).map(|attr| attr.dqpn) else {
-                error!("invalid qpn");
-                continue;
-            };
-            let frame = match x {
-                AckResponse::Ack { qpn, msn, last_psn } => {
-                    AckFrameBuilder::build_ack(last_psn, u128::MAX, 0.into(), 0, dqpn, false, false)
-                }
-                AckResponse::Nak {
-                    qpn,
-                    base_psn,
-                    ack_req_packet_psn,
-                } => AckFrameBuilder::build_ack(
-                    ack_req_packet_psn + 1,
-                    0,
-                    base_psn,
-                    0,
-                    dqpn,
-                    true,
-                    true,
-                ),
-            };
-            if let Err(e) = self.raw_frame_tx.send(&frame) {
-                error!("failed to send ack frame");
-            }
         }
     }
 }
