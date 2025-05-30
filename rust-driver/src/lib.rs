@@ -198,6 +198,6 @@ mod spawner;
 mod types;
 mod utils;
 
-pub use device::ffi::BlueRdmaCore;
+pub use device::ffi::{BlueRdmaCore, RdmaCtxOps};
 pub use simple_nic::SimpleNicDeviceConfig;
 pub mod test_wrapper;

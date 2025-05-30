@@ -36,7 +36,7 @@ static HEAP_ALLOCATOR: sim_alloc::Simalloc = sim_alloc::Simalloc::new();
 ///
 /// # Safety
 /// Implementors must ensure all FFI and RDMA verbs specification requirements are met,
-pub(crate) unsafe trait RdmaCtxOps {
+pub unsafe trait RdmaCtxOps {
     fn init();
 
     #[allow(clippy::new_ret_no_self)]

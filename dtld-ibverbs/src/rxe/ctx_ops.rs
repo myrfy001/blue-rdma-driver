@@ -1,7 +1,6 @@
 use core::ffi::{c_char, c_void};
 
-use blue_rdma_driver::BlueRdmaCore;
-use blue_rdma_driver::ctx_ops::RdmaCtxOps;
+use blue_rdma_driver::{BlueRdmaCore, RdmaCtxOps};
 
 // const RXE_DEVICE_NAME: &str = "rxe_0";
 
