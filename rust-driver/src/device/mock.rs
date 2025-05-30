@@ -503,7 +503,7 @@ impl MrTable {
         let inner = self.inner.lock();
         inner
             .iter()
-            .any(|Mr { addr, length }| a >= *addr && (a + l as u64) < addr + *length as u64)
+            .any(|&Mr { addr, length }| a >= addr && (a + l as u64) < addr + length as u64)
     }
 }
 
@@ -894,6 +894,8 @@ mod tests {
 
     #[test]
     fn rdma_write_with_completion_multi() {
+        const NUM_WRITES: usize = 10;
+
         let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
         let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
         handshake(&mut dev0, &dev1);
@@ -910,7 +912,6 @@ mod tests {
             0,
             WorkReqOpCode::RdmaWriteWithImm,
         );
-        const NUM_WRITES: usize = 10;
         for _ in 0..NUM_WRITES {
             let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
             dev0.dev.post_send(dev0.qpn, wr.into());
@@ -1047,6 +1048,8 @@ mod tests {
 
     #[test]
     fn send_recv_with_completion_multi() {
+        const NUM_SEND_RECV: usize = 10;
+
         let mut dev0 = create_dev(Ipv4Addr::new(127, 0, 0, 1));
         let mut dev1 = create_dev(Ipv4Addr::new(127, 0, 0, 2));
         handshake(&mut dev0, &dev1);
@@ -1054,8 +1057,6 @@ mod tests {
 
         let buf0 = Box::new([1u8; 128]);
         let buf1 = Box::new([0u8; 128]);
-
-        const NUM_SEND_RECV: usize = 10;
 
         for _ in 0..NUM_SEND_RECV {
             let recv_wr = RecvWr {

@@ -23,13 +23,9 @@ impl SendHandle {
     pub(crate) fn new(injector: Arc<WrInjector>) -> Self {
         Self { injector }
     }
-}
 
-impl SendHandle {
-    pub(crate) fn send(&self, wr: WrChunk) -> io::Result<()> {
+    pub(crate) fn send(&self, wr: WrChunk) {
         self.injector.push(wr);
-
-        Ok(())
     }
 }
 
@@ -62,7 +58,7 @@ impl<Dev: DeviceAdaptor> SendQueueSync<Dev> {
         true
     }
 
-    fn sync_head(&mut self) {
+    fn sync_head(&self) {
         self.csr_adaptor
             .write_head(self.send_queue.head())
             .expect("failed to write head csr");

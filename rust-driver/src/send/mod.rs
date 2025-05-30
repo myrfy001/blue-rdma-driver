@@ -20,7 +20,7 @@ pub(crate) fn spawn<Dev>(
     dev: &Dev,
     bufs: Vec<DmaBuf>,
     mode: Mode,
-    abort: AbortSignal,
+    abort: &AbortSignal,
 ) -> io::Result<SendHandle>
 where
     Dev: DeviceAdaptor + Clone + Send + 'static,

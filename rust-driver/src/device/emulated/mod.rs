@@ -4,6 +4,7 @@ use std::{
     sync::Arc,
 };
 
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 use crate::device::constants::{
@@ -31,7 +32,7 @@ struct CsrAccessRpcMessage {
 
 impl RpcClient {
     pub(super) fn new(server_addr: SocketAddr) -> io::Result<Self> {
-        println!("connect to: {server_addr}");
+        debug!("connect to: {server_addr}");
         let socket = UdpSocket::bind("0.0.0.0:0")?;
         socket.connect(server_addr)?;
         Ok(Self(socket.into()))
@@ -44,7 +45,7 @@ impl RpcClient {
             value: 0,
         };
 
-        println!("send msg: {msg:?}");
+        debug!("send msg: {msg:?}");
         let send_buf = serde_json::to_vec(&msg)?;
         let _: usize = self.0.send(&send_buf)?;
 
@@ -63,7 +64,7 @@ impl RpcClient {
             addr,
             value: data,
         };
-        println!("send msg write: {msg:?}");
+        debug!("send msg write: {msg:?}");
 
         let send_buf = serde_json::to_vec(&msg)?;
         let _: usize = self.0.send(&send_buf)?;

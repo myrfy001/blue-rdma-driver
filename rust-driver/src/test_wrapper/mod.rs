@@ -43,7 +43,7 @@ pub fn test_full_rb() -> io::Result<()> {
         gateway: "10.0.0.1".parse().unwrap(),
         mac: MacAddress([1; 6]),
     };
-    cmd_controller.set_network(network_config).unwrap();
+    cmd_controller.set_network(network_config);
 
     let sqpn = 1;
     let dqpn = 2;

@@ -1,6 +1,7 @@
+#![allow(warnings)]
+
 use std::{
     env,
-    ffi::c_void,
     fmt::Debug,
     fs, io,
     net::{SocketAddr, UdpSocket},

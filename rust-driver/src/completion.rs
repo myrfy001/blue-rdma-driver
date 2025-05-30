@@ -244,7 +244,7 @@ impl QueuePairMessageTracker {
                 RecvEventOp::RecvRead | RecvEventOp::Write => {}
             }
             if event.ack_req {
-                let _ignore = ack_resp_tx.send(AckResponse::Ack {
+                ack_resp_tx.send(AckResponse::Ack {
                     qpn,
                     msn: event.meta().msn,
                     last_psn: event.meta().end_psn,

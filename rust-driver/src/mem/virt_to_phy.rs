@@ -87,7 +87,7 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
                 return Ok(Some(phys_addr));
             }
 
-            return Ok(None);
+            Ok(None)
         };
 
         if let pa @ Some(_) = get_pa_from_file(file)? {
@@ -100,7 +100,7 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
             }
         }
 
-        return Ok(None);
+        Ok(None)
     }
 
     fn virt_to_phys_range(
@@ -116,7 +116,7 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
         let mut maybe_gpu_ptr = true;
 
         let mut addr = start_addr;
-        for i in 0..num_pages {
+        for pa in &mut phy_addrs {
             let virt_pfn = addr / base_page_size;
             let offset = PFN_MASK_SIZE as u64 * virt_pfn;
             let _pos = file.seek(io::SeekFrom::Start(offset))?;
@@ -125,7 +125,7 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
             if (entry >> PAGE_PRESENT_BIT) & 1 != 0 {
                 let phys_pfn = entry & PFN_MASK;
                 let phys_addr = phys_pfn * base_page_size + start_addr % base_page_size;
-                phy_addrs[i] = Some(phys_addr);
+                *pa = Some(phys_addr);
 
                 maybe_gpu_ptr = false;
             }
@@ -134,14 +134,14 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
         }
 
         if maybe_gpu_ptr {
-            debug_assert!(phy_addrs.iter().all(|opt| opt.is_none()));
+            debug_assert!(phy_addrs.iter().all(Option::is_none), "invalid address");
 
             let Ok(mut gpu_ptr_translator) = File::open("/dev/gpu_ptr_translator") else {
                 return Ok(phy_addrs);
             };
 
             addr = start_addr;
-            for i in 0..num_pages {
+            for pa in &mut phy_addrs {
                 let virt_pfn = addr / base_page_size;
                 let offset = PFN_MASK_SIZE as u64 * virt_pfn;
                 let _pos = file.seek(io::SeekFrom::Start(offset))?;
@@ -150,7 +150,7 @@ impl AddressResolver for PhysAddrResolverLinuxX86 {
                 if (entry >> PAGE_PRESENT_BIT) & 1 != 0 {
                     let phys_pfn = entry & PFN_MASK;
                     let phys_addr = phys_pfn * base_page_size + start_addr % base_page_size;
-                    phy_addrs[i] = Some(phys_addr);
+                    *pa = Some(phys_addr);
                 }
 
                 addr += PAGE_SIZE;

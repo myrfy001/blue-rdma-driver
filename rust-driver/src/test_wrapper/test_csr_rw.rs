@@ -49,7 +49,7 @@ impl TestDevice {
             gateway: "10.0.0.1".parse().unwrap(),
             mac: MacAddress([0; 6]),
         };
-        cmd_controller.set_network(network_config).unwrap();
+        cmd_controller.set_network(network_config);
 
         Ok(Self)
     }
@@ -79,10 +79,9 @@ impl TestDevice {
             gateway: "10.0.0.1".parse().unwrap(),
             mac: MacAddress([1; 6]),
         };
-        cmd_controller.set_network(network_config).unwrap();
+        cmd_controller.set_network(network_config);
 
         let data = adaptor.read_csr(0x100).unwrap();
-        println!("data: {data}");
         //adaptor.write_csr(0x100, data).unwrap();
         Ok(Self)
     }

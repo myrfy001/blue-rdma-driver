@@ -102,8 +102,7 @@ impl MetaHandler {
     }
 
     fn update_ack_timer(&self, meta: &ReportMeta) {
-        let _ignore = self
-            .ack_timeout_tx
+        self.ack_timeout_tx
             .send(AckTimeoutTask::recv_meta(meta.qpn()));
     }
 
@@ -152,8 +151,7 @@ impl MetaHandler {
             self.sender_updates(meta.qpn, psn);
         }
 
-        let _ignore = self
-            .packet_retransmit_tx
+        self.packet_retransmit_tx
             .send(PacketRetransmitTask::RetransmitRange {
                 qpn: meta.qpn,
                 psn_low: meta.psn_pre,
@@ -172,8 +170,7 @@ impl MetaHandler {
             self.sender_updates(meta.qpn, psn);
         }
 
-        let _ignore = self
-            .packet_retransmit_tx
+        self.packet_retransmit_tx
             .send(PacketRetransmitTask::RetransmitRange {
                 qpn: meta.qpn,
                 psn_low: meta.psn_pre,
@@ -184,23 +181,18 @@ impl MetaHandler {
     }
 
     pub(crate) fn sender_updates(&self, qpn: u32, base_psn: Psn) {
-        let _ignore = self
-            .completion_tx
+        self.completion_tx
             .send(CompletionTask::AckSend { qpn, base_psn });
-        let _ignore = self
-            .packet_retransmit_tx
+        self.packet_retransmit_tx
             .send(PacketRetransmitTask::Ack { qpn, psn: base_psn });
-        let _ignore = self
-            .rdma_write_tx
+        self.rdma_write_tx
             .send(RdmaWriteTask::new_ack(qpn, base_psn));
     }
 
     pub(crate) fn receiver_updates(&self, qpn: u32, base_psn: Psn) {
-        let _ignore = self
-            .completion_tx
+        self.completion_tx
             .send(CompletionTask::AckRecv { qpn, base_psn });
-        let _ignore = self
-            .packet_retransmit_tx
+        self.packet_retransmit_tx
             .send(PacketRetransmitTask::Ack { qpn, psn: base_psn });
     }
 
@@ -213,13 +205,13 @@ impl MetaHandler {
                 MessageMeta::new(meta.msn, end_psn),
                 true,
             ));
-            let _ignore = self.completion_tx.send(CompletionTask::Register {
+            self.completion_tx.send(CompletionTask::Register {
                 qpn: meta.dqpn,
                 event,
             });
             let tracker = self.recv_table.get_qp_mut(meta.dqpn)?;
             if let Some(base_psn) = tracker.ack_one(meta.psn) {
-                let __ignore = self.completion_tx.send(CompletionTask::AckRecv {
+                self.completion_tx.send(CompletionTask::AckRecv {
                     qpn: meta.dqpn,
                     base_psn,
                 });
@@ -243,7 +235,7 @@ impl MetaHandler {
         );
         let send_wr = SendWrRdma::new_from_base(base, meta.laddr, meta.lkey);
         let (task, _) = RdmaWriteTask::new_write(meta.dqpn, send_wr);
-        let _ignore = self.rdma_write_tx.send(task);
+        self.rdma_write_tx.send(task);
 
         Some(())
     }
@@ -275,8 +267,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
-                    let _ignore = self
-                        .completion_tx
+                    self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
                 HeaderType::WriteWithImm => {
@@ -286,8 +277,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
-                    let _ignore = self
-                        .completion_tx
+                    self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
                 HeaderType::Send => {
@@ -297,8 +287,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
-                    let _ignore = self
-                        .completion_tx
+                    self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
                 HeaderType::SendWithImm => {
@@ -308,8 +297,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
-                    let _ignore = self
-                        .completion_tx
+                    self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
                 HeaderType::ReadResp => {
@@ -319,21 +307,20 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
-                    let _ignore = self
-                        .completion_tx
+                    self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
             }
         }
         if let Some(base_psn) = tracker.ack_one(psn) {
-            let _ignore = self.completion_tx.send(CompletionTask::AckRecv {
+            self.completion_tx.send(CompletionTask::AckRecv {
                 qpn: dqpn,
                 base_psn,
             });
         }
         /// Timeout of an `AckReq` message, notify retransmission
         if matches!(pos, PacketPos::Last | PacketPos::Only) && is_retry && ack_req {
-            let _ignore = self.ack_tx.send(AckResponse::Nak {
+            self.ack_tx.send(AckResponse::Nak {
                 qpn: dqpn,
                 base_psn: tracker.base_psn(),
                 ack_req_packet_psn: psn - 1,

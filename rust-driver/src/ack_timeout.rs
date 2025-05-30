@@ -77,8 +77,8 @@ impl AckTimeoutTask {
         Self::Ack { qpn }
     }
 
-    pub(crate) fn qpn(&self) -> u32 {
-        match *self {
+    pub(crate) fn qpn(self) -> u32 {
+        match self {
             AckTimeoutTask::NewAckReq { qpn }
             | AckTimeoutTask::RecvMeta { qpn }
             | AckTimeoutTask::Ack { qpn } => qpn,

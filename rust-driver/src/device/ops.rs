@@ -118,7 +118,7 @@ where
             rx_buffer,
         )?;
         let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
-        let handle = send::spawn(&adaptor, send_bufs, mode, abort.clone())?;
+        let handle = send::spawn(&adaptor, send_bufs, mode, &abort)?;
         let ack_tx = AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx))
             .spawn("AckResponder", abort.clone());
         let packet_retransmit_tx = PacketRetransmitWorker::new(handle.clone())
@@ -156,8 +156,8 @@ where
             rdma_write_tx.clone(),
             abort.clone(),
         )?;
-        cmd_controller.set_network(config.network())?;
-        cmd_controller.set_raw_packet_recv_buffer(RecvBufferMeta::new(rx_buffer_pa))?;
+        cmd_controller.set_network(config.network());
+        cmd_controller.set_raw_packet_recv_buffer(RecvBufferMeta::new(rx_buffer_pa));
 
         #[allow(clippy::mem_forget)]
         std::mem::forget(simple_nic_rx); // prevent libc::munmap being called
@@ -259,7 +259,7 @@ where
         let base_index = pgt_entry.index;
         let mtt_update = MttUpdate::new(addr, length_u32, mr_key, pd_handle, access, base_index);
         // TODO: makes updates atomic
-        self.cmd_controller.update_mtt(mtt_update)?;
+        self.cmd_controller.update_mtt(mtt_update);
         for PgtEntry { index, count } in chunks(pgt_entry) {
             let bytes: Vec<u8> = phys_addrs
                 .by_ref()
@@ -268,7 +268,7 @@ where
                 .collect();
             buf.copy_from(0, &bytes);
             let pgt_update = PgtUpdate::new(self.mtt_buffer.phys_addr, index, count - 1);
-            self.cmd_controller.update_pgt(pgt_update)?;
+            self.cmd_controller.update_pgt(pgt_update);
         }
 
         Ok(mr_key)
@@ -299,7 +299,7 @@ where
             qpn,
             ..Default::default()
         };
-        self.cmd_controller.update_qp(entry)?;
+        self.cmd_controller.update_qp(entry);
 
         Ok(qpn)
     }

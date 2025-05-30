@@ -73,7 +73,6 @@
     clippy::missing_inline_in_public_items,
     // clippy::mod_module_files, mod.rs file is used
     clippy::modulo_arithmetic,
-    clippy::multiple_inherent_impl,
     clippy::panic,
     // clippy::panic_in_result_fn, not necessary as panic is banned
     clippy::pattern_type_mismatch,

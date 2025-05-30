@@ -115,9 +115,10 @@ pub struct NetworkConfig {
 }
 
 impl Default for NetworkConfig {
+    #[inline]
     fn default() -> Self {
         Self {
-            ip: Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0).unwrap(),
+            ip: Ipv4Network::new(Ipv4Addr::new(0, 0, 0, 0), 0).expect("invalid address"),
             peer_ip: Ipv4Addr::new(0, 0, 0, 0),
             gateway: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
             mac: MacAddress::default(),

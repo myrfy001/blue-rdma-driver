@@ -148,15 +148,15 @@ impl RdmaWriteWorker {
         }
 
         if ack_req {
-            let _ignore = self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
+            self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
-        let _ignore = self.retransmit_tx.send(PacketRetransmitTask::NewWr {
+        self.retransmit_tx.send(PacketRetransmitTask::NewWr {
             qpn,
             wr: SendQueueElem::new(wr, psn, qp_params),
         });
 
-        self.send_handle.send(chunk)?;
+        self.send_handle.send(chunk);
 
         Ok(())
     }
@@ -217,17 +217,17 @@ impl RdmaWriteWorker {
             let Some(last_packet_chunk) = fragmenter.into_iter().last() else {
                 return Ok(());
             };
-            let _ignore = self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
+            self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
         }
 
-        let _ignore = self.retransmit_tx.send(PacketRetransmitTask::NewWr {
+        self.retransmit_tx.send(PacketRetransmitTask::NewWr {
             qpn,
             wr: SendQueueElem::new(wr, psn, qp_params),
         });
 
         let fragmenter = WrChunkFragmenter::new(wr, qp_params, psn);
         for chunk in fragmenter {
-            self.send_handle.send(chunk)?;
+            self.send_handle.send(chunk);
         }
 
         Ok(())

@@ -308,6 +308,7 @@ impl ValidationError {
     }
 }
 
+#[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
 pub(crate) struct RecvWr {
     pub(crate) wr_id: u64,

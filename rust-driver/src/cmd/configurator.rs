@@ -97,7 +97,7 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
 }
 
 impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
-    pub(crate) fn update_mtt(&self, update: MttUpdate) -> io::Result<()> {
+    pub(crate) fn update_mtt(&self, update: MttUpdate) {
         let update_mr_table = CmdQueueReqDescUpdateMrTable::new(
             0,
             update.mr_base_va,
@@ -112,11 +112,9 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
         qp_update.push(CmdQueueDesc::UpdateMrTable(update_mr_table));
         qp_update.flush(&self.req_csr_proxy);
         qp_update.wait(&self.resp_csr_proxy);
-
-        Ok(())
     }
 
-    pub(crate) fn update_pgt(&self, update: PgtUpdate) -> io::Result<()> {
+    pub(crate) fn update_pgt(&self, update: PgtUpdate) {
         let desc = CmdQueueReqDescUpdatePGT::new(
             0,
             update.dma_addr,
@@ -128,11 +126,9 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
         qp_update.push(CmdQueueDesc::UpdatePGT(desc));
         qp_update.flush(&self.req_csr_proxy);
         qp_update.wait(&self.resp_csr_proxy);
-
-        Ok(())
     }
 
-    pub(crate) fn update_qp(&self, entry: UpdateQp) -> io::Result<()> {
+    pub(crate) fn update_qp(&self, entry: UpdateQp) {
         let desc = CmdQueueReqDescQpManagement::new(
             0,
             entry.ip_addr,
@@ -152,11 +148,9 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
         update.push(CmdQueueDesc::ManageQP(desc));
         update.flush(&self.req_csr_proxy);
         update.wait(&self.resp_csr_proxy);
-
-        Ok(())
     }
 
-    pub(crate) fn set_network(&self, param: NetworkConfig) -> io::Result<()> {
+    pub(crate) fn set_network(&self, param: NetworkConfig) {
         let IpAddr::V4(gateway) = param.gateway else {
             unreachable!("IPv6 unsupported")
         };
@@ -173,19 +167,15 @@ impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
         update.push(CmdQueueDesc::SetNetworkParam(desc));
         update.flush(&self.req_csr_proxy);
         update.wait(&self.resp_csr_proxy);
-
-        Ok(())
     }
 
-    pub(crate) fn set_raw_packet_recv_buffer(&self, meta: RecvBufferMeta) -> io::Result<()> {
+    pub(crate) fn set_raw_packet_recv_buffer(&self, meta: RecvBufferMeta) {
         let desc = CmdQueueReqDescSetRawPacketReceiveMeta::new(0, meta.phys_addr);
         let mut qp = self.cmd_qp.lock();
         let mut update = qp.update();
         update.push(CmdQueueDesc::SetRawPacketReceiveMeta(desc));
         update.flush(&self.req_csr_proxy);
         update.wait(&self.resp_csr_proxy);
-
-        Ok(())
     }
 }
 

@@ -104,6 +104,7 @@ impl CmdRespQueue {
 
 #[allow(clippy::missing_docs_in_private_items)]
 /// Memory Translation Table entry
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct MttUpdate {
     pub(crate) mr_base_va: u64,
     pub(crate) mr_length: u32,
@@ -133,6 +134,7 @@ impl MttUpdate {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct PgtUpdate {
     pub(crate) dma_addr: u64,
     pub(crate) pgt_offset: u32,
@@ -151,7 +153,7 @@ impl PgtUpdate {
 
 /// Queue Pair entry
 #[allow(clippy::missing_docs_in_private_items)]
-#[derive(Default)]
+#[derive(Debug, Default, Clone, Copy)]
 pub(crate) struct UpdateQp {
     pub(crate) ip_addr: u32,
     pub(crate) qpn: u32,
@@ -170,6 +172,7 @@ pub(crate) struct RecvBuffer {
 }
 
 /// Metadata about a receive buffer
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct RecvBufferMeta {
     /// Physical address of the receive buffer
     pub(crate) phys_addr: u64,
