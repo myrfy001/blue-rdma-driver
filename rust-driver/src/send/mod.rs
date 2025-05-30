@@ -7,6 +7,7 @@ use crate::{
     device::{mode::Mode, proxy::build_send_queue_proxies, CsrBaseAddrAdaptor, DeviceAdaptor},
     mem::DmaBuf,
     ringbuf_desc::DescRingBuffer,
+    spawner::{AbortSignal, SingleThreadPollingWorker},
 };
 
 mod types;
@@ -15,7 +16,12 @@ mod worker;
 pub(crate) use types::*;
 pub(crate) use worker::SendHandle;
 
-pub(crate) fn spawn<Dev>(dev: &Dev, bufs: Vec<DmaBuf>, mode: Mode) -> io::Result<SendHandle>
+pub(crate) fn spawn<Dev>(
+    dev: &Dev,
+    bufs: Vec<DmaBuf>,
+    mode: Mode,
+    abort: AbortSignal,
+) -> io::Result<SendHandle>
 where
     Dev: DeviceAdaptor + Clone + Send + 'static,
 {
@@ -37,25 +43,22 @@ where
         .into_iter()
         .zip(sq_proxies)
         .map(|(sq, proxy)| SendQueueSync::new(sq, proxy));
-    workers
-        .into_iter()
-        .zip(sqs)
-        .enumerate()
-        .map(|(id, (local, sq))| {
-            SendWorker::new(
-                id,
-                local,
-                Arc::clone(&injector),
-                stealers
-                    .clone()
-                    .into_iter()
-                    .enumerate()
-                    .filter_map(|(i, x)| (i != id).then_some(x))
-                    .collect(),
-                sq,
-            )
-        })
-        .for_each(SendWorker::spawn);
+    for (id, (local, sq)) in workers.into_iter().zip(sqs).enumerate() {
+        let worker = SendWorker::new(
+            id,
+            local,
+            Arc::clone(&injector),
+            stealers
+                .clone()
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, x)| (i != id).then_some(x))
+                .collect(),
+            sq,
+        );
+        let name = format!("SendWorker{id}");
+        worker.spawn(&name, abort.clone());
+    }
 
     Ok(handle)
 }

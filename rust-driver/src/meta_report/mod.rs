@@ -20,7 +20,7 @@ use crate::{
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     ringbuf_desc::DescRingBuffer,
-    spawner::TaskTx,
+    spawner::{AbortSignal, SingleThreadPollingWorker, TaskTx},
 };
 
 pub(crate) use types::*;
@@ -35,7 +35,7 @@ pub(crate) fn spawn<Dev>(
     packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
     completion_tx: TaskTx<CompletionTask>,
     rdma_write_tx: TaskTx<RdmaWriteTask>,
-    is_shutdown: Arc<AtomicBool>,
+    abort: AbortSignal,
 ) -> io::Result<()>
 where
     Dev: Clone + DeviceAdaptor + Send + 'static,
@@ -58,7 +58,7 @@ where
         completion_tx,
         rdma_write_tx,
     );
-    MetaWorker::new(MetaReportQueueHandler::new(ctxs), handler).spawn(is_shutdown);
+    MetaWorker::new(MetaReportQueueHandler::new(ctxs), handler).spawn("MetaWorker", abort);
 
     Ok(())
 }

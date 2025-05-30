@@ -103,7 +103,6 @@ where
             .take(mode.num_channel())
             .collect::<Result<_, _>>()?;
 
-        let is_shutdown = Arc::new(AtomicBool::new(false));
         let abort = AbortSignal::new();
         let rx_buffer = rb_allocator.alloc()?;
         let rx_buffer_pa = rx_buffer.phys_addr;
@@ -111,7 +110,6 @@ where
         let qp_manager = QpManager::new();
         let cq_manager = CqManager::new();
         let cq_table = CompletionQueueTable::new();
-
         let simple_nic_controller = SimpleNicController::init_v2(
             &adaptor,
             rb_allocator.alloc()?,
@@ -119,8 +117,8 @@ where
             rb_allocator.alloc()?,
             rx_buffer,
         )?;
-        let handle = send::spawn(&adaptor, send_bufs, mode)?;
         let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
+        let handle = send::spawn(&adaptor, send_bufs, mode, abort.clone())?;
         let ack_tx = AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx))
             .spawn("AckResponder", abort.clone());
         let packet_retransmit_tx = PacketRetransmitWorker::new(handle.clone())
@@ -156,7 +154,7 @@ where
             packet_retransmit_tx.clone(),
             completion_tx.clone(),
             rdma_write_tx.clone(),
-            Arc::clone(&is_shutdown),
+            abort.clone(),
         )?;
         cmd_controller.set_network(config.network())?;
         cmd_controller.set_raw_packet_recv_buffer(RecvBufferMeta::new(rx_buffer_pa))?;

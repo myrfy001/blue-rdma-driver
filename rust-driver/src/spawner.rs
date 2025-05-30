@@ -8,6 +8,39 @@ use std::{
 
 use log::{error, info};
 
+pub(crate) trait SingleThreadPollingWorker {
+    type Task;
+
+    fn poll(&mut self) -> Option<Self::Task>;
+
+    fn process(&mut self, task: Self::Task);
+
+    fn spawn(mut self, name: &str, abort: AbortSignal)
+    where
+        Self: Sized + Send + 'static,
+        Self::Task: Send + 'static,
+    {
+        let name = name.to_owned();
+        let abort = AbortSignal::new();
+        let abort_c = abort.clone();
+        let _handle = std::thread::Builder::new()
+            .name(name.clone())
+            .spawn(move || {
+                info!("worker {name} running");
+                loop {
+                    if abort.should_abort() {
+                        break;
+                    }
+                    if let Some(task) = self.poll() {
+                        self.process(task);
+                    }
+                }
+                info!("worker {name} exited");
+            })
+            .expect("failed to spawn worker");
+    }
+}
+
 pub(crate) trait SingleThreadTaskWorker {
     type Task;
 
@@ -119,4 +152,3 @@ impl AbortSignal {
         self.inner.store(false, Ordering::Relaxed);
     }
 }
-

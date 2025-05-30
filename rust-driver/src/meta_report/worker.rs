@@ -20,7 +20,7 @@ use crate::{
     rdma_worker::RdmaWriteTask,
     retransmit::PacketRetransmitTask,
     send::WorkReqOpCode,
-    spawner::TaskTx,
+    spawner::{SingleThreadPollingWorker, TaskTx},
     types::{SendWrBase, SendWrRdma},
     utils::Psn,
 };
@@ -38,27 +38,22 @@ pub(crate) struct MetaWorker<Dev> {
     handler: MetaHandler,
 }
 
-impl<Dev: DeviceAdaptor + Send + 'static> MetaWorker<Dev> {
+impl<Dev> MetaWorker<Dev> {
     pub(crate) fn new(inner: MetaReportQueueHandler<Dev>, handler: MetaHandler) -> Self {
         Self { inner, handler }
     }
+}
 
-    pub(crate) fn spawn(self, is_shutdown: Arc<AtomicBool>) {
-        let _handle = thread::Builder::new()
-            .name("meta-worker".into())
-            .spawn(move || self.run(is_shutdown))
-            .unwrap_or_else(|err| unreachable!("Failed to spawn rx thread: {err}"));
+impl<Dev: DeviceAdaptor + Send + 'static> SingleThreadPollingWorker for MetaWorker<Dev> {
+    type Task = ReportMeta;
+
+    fn poll(&mut self) -> Option<Self::Task> {
+        self.inner.try_recv_meta()
     }
 
-    #[allow(clippy::needless_pass_by_value)] // consume the flag
-    /// Run the handler loop
-    fn run(mut self, is_shutdown: Arc<AtomicBool>) {
-        while !is_shutdown.load(Ordering::Relaxed) {
-            if let Some(meta) = self.inner.try_recv_meta() {
-                if self.handler.handle_meta(meta).is_none() {
-                    error!("invalid meta: {meta:?}");
-                }
-            }
+    fn process(&mut self, meta: Self::Task) {
+        if self.handler.handle_meta(meta).is_none() {
+            error!("invalid meta: {meta:?}");
         }
     }
 }
