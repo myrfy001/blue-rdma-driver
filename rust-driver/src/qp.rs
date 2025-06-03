@@ -29,47 +29,6 @@ pub(crate) struct QpAttr {
     pub(crate) recv_cq: Option<u32>,
 }
 
-pub(crate) struct QueuePairAttrTable {
-    inner: Arc<[RwLock<QpAttr>]>,
-}
-
-impl QueuePairAttrTable {
-    pub(crate) fn new() -> Self {
-        Self {
-            inner: iter::repeat_with(RwLock::default)
-                .take(MAX_QP_CNT)
-                .collect(),
-        }
-    }
-
-    pub(crate) fn clone_arc(&self) -> Self {
-        Self {
-            inner: Arc::clone(&self.inner),
-        }
-    }
-
-    pub(crate) fn get(&self, qpn: u32) -> Option<QpAttr> {
-        let index = index(qpn);
-        self.inner.get(index).map(|x| *x.read())
-    }
-
-    pub(crate) fn map_qp<F, T>(&self, qpn: u32, mut f: F) -> Option<T>
-    where
-        F: FnMut(&QpAttr) -> T,
-    {
-        let index = index(qpn);
-        self.inner.get(index).map(|x| f(&x.read()))
-    }
-
-    pub(crate) fn map_qp_mut<F, T>(&self, qpn: u32, mut f: F) -> Option<T>
-    where
-        F: FnMut(&mut QpAttr) -> T,
-    {
-        let index = index(qpn);
-        self.inner.get(index).map(|x| f(&mut x.write()))
-    }
-}
-
 /// Manages QPs
 pub(crate) struct QpManager {
     /// Bitmap tracking allocated QPNs

@@ -7,7 +7,7 @@ use crate::{
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
-    qp::{num_psn, QpAttr, QpTable, QpTableShared, QueuePairAttrTable, SqContext},
+    qp::{num_psn, QpAttr, QpTable, QpTableShared, SqContext},
     retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
     spawner::{SingleThreadTaskWorker, TaskTx},

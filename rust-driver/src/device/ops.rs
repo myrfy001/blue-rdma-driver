@@ -26,7 +26,7 @@ use crate::{
     meta_report,
     mtt::{Mtt, PgtEntry},
     net::config::NetworkConfig,
-    qp::{QpAttr, QpManager, QpTableShared, QueuePairAttrTable},
+    qp::{QpAttr, QpManager, QpTableShared},
     rdma_worker::{RdmaWriteTask, RdmaWriteWorker},
     recv::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWrQueueTable, TcpChannel,

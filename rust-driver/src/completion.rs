@@ -8,7 +8,7 @@ use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
     constants::MAX_CQ_CNT,
-    qp::{QpAttr, QpTable, QpTableShared, QueuePairAttrTable},
+    qp::{QpAttr, QpTable, QpTableShared},
     spawner::{SingleThreadTaskWorker, TaskTx},
     utils::{Msn, Psn},
 };

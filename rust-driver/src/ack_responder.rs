@@ -14,7 +14,7 @@ use pnet::{
 
 use crate::{
     constants::{CARD_IP_ADDRESS, PSN_MASK},
-    qp::{QpAttr, QpTableShared, QueuePairAttrTable},
+    qp::{QpAttr, QpTableShared},
     simple_nic::FrameTx,
     spawner::SingleThreadTaskWorker,
     utils::Psn,
