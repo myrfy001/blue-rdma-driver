@@ -123,13 +123,12 @@ where
             .spawn("AckResponder", abort.clone());
         let packet_retransmit_tx = PacketRetransmitWorker::new(handle.clone())
             .spawn("PacketRetransmitWorker", abort.clone());
-        let ack_timeout_tx =
-            QpAckTimeoutWorker::new(packet_retransmit_tx.clone(), handle.clone(), config.ack())
-                .spawn_polling(
-                    "QpAckTimeoutWorker",
-                    abort.clone(),
-                    Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
-                );
+        let ack_timeout_tx = QpAckTimeoutWorker::new(packet_retransmit_tx.clone(), config.ack())
+            .spawn_polling(
+                "QpAckTimeoutWorker",
+                abort.clone(),
+                Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
+            );
         let completion_tx = CompletionWorker::new(
             cq_table.clone_arc(),
             qp_attr_table.clone(),

@@ -158,7 +158,6 @@ pub(crate) struct QpAckTimeoutWorker {
     timer_table: QpTable<TransportTimer>,
     // TODO: maintain this value as atomic variable
     outstanding_ack_req_cnt: QpTable<usize>,
-    wr_sender: SendHandle,
     config: AckTimeoutConfig,
 }
 
@@ -210,7 +209,6 @@ impl SingleThreadTaskWorker for QpAckTimeoutWorker {
 impl QpAckTimeoutWorker {
     pub(crate) fn new(
         packet_retransmit_tx: TaskTx<PacketRetransmitTask>,
-        wr_sender: SendHandle,
         config: AckTimeoutConfig,
     ) -> Self {
         let timer_table = QpTable::new_with(|| {
@@ -219,7 +217,6 @@ impl QpAckTimeoutWorker {
         Self {
             packet_retransmit_tx,
             timer_table,
-            wr_sender,
             config,
             outstanding_ack_req_cnt: QpTable::new(),
         }
