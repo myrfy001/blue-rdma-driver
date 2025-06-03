@@ -74,7 +74,7 @@ impl DescRingBuffer {
     }
 
     fn has_next(desc: &[u8; 32]) -> bool {
-        desc[31] >> 6 == 1
+        (desc[31] >> 6) & 1 == 1
     }
 }
 
