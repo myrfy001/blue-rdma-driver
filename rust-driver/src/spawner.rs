@@ -140,7 +140,7 @@ pub(crate) struct AbortSignal {
 impl AbortSignal {
     pub(crate) fn new() -> Self {
         Self {
-            inner: Arc::new(AtomicBool::new(true)),
+            inner: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -149,6 +149,6 @@ impl AbortSignal {
     }
 
     pub(crate) fn abort(&self) {
-        self.inner.store(false, Ordering::Relaxed);
+        self.inner.store(true, Ordering::Relaxed);
     }
 }
