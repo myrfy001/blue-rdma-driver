@@ -9,9 +9,6 @@ pub(crate) mod virt_to_phy;
 /// Page implementation
 pub(crate) mod page;
 
-/// Slot allocation implementation
-pub(crate) mod slot_alloc;
-
 pub(crate) mod dmabuf;
 
 pub(crate) mod u_dma_buf;

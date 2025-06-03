@@ -18,7 +18,6 @@ use std::io;
 
 use crate::mem::{
     page::{ContiguousPages, HostPageAllocator, PageAllocator},
-    slot_alloc::{RcSlot, SlotAlloc, SlotSize},
     virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
 };
 
