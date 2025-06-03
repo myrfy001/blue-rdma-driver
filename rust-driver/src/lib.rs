@@ -41,7 +41,6 @@
 
     clippy::all,
     clippy::pedantic,
-    clippy::cargo,
 
     // The followings are selected restriction lints for rust 1.57
     clippy::as_conversions,
