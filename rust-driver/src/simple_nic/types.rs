@@ -20,7 +20,7 @@ impl SimpleNicTxQueue {
     }
 
     pub(crate) fn push(&mut self, desc: SimpleNicTxQueueDesc) -> bool {
-        self.inner.push(desc.into())
+        self.inner.push(&desc)
     }
 
     pub(crate) fn head(&self) -> u32 {
@@ -48,6 +48,6 @@ impl SimpleNicRxQueue {
     }
 
     pub(crate) fn pop(&mut self) -> Option<SimpleNicRxQueueDesc> {
-        self.inner.pop().map(Into::into)
+        self.inner.pop()
     }
 }

@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use crossbeam_deque::{Injector, Stealer, Worker};
 
 use crate::{
-    descriptors::{RingBufDescUntyped, SendQueueReqDescSeg0, SendQueueReqDescSeg1},
+    descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     qp::convert_ibv_mtu_to_u16,
-    ringbuf_desc::DescRingBuffer,
+    ringbuf_desc::{DescRingBuffer, DescSerialize},
     utils::Psn,
 };
 
@@ -25,11 +25,11 @@ pub(crate) enum SendQueueDesc {
     Seg1(SendQueueReqDescSeg1),
 }
 
-impl From<SendQueueDesc> for RingBufDescUntyped {
-    fn from(desc: SendQueueDesc) -> Self {
-        match desc {
-            SendQueueDesc::Seg0(d) => d.into(),
-            SendQueueDesc::Seg1(d) => d.into(),
+impl DescSerialize for SendQueueDesc {
+    fn serialize(&self) -> [u8; 32] {
+        match *self {
+            SendQueueDesc::Seg0(x) => x.serialize(),
+            SendQueueDesc::Seg1(x) => x.serialize(),
         }
     }
 }
@@ -46,7 +46,7 @@ impl SendQueue {
     }
 
     pub(crate) fn push(&mut self, desc: SendQueueDesc) -> bool {
-        self.inner.push(desc.into())
+        self.inner.push(&desc)
     }
 
     /// Returns the head pointer of the buffer

@@ -1,5 +1,10 @@
 use bilge::prelude::*;
 
+use crate::{
+    impl_desc_serde,
+    ringbuf_desc::{DescDeserialize, DescSerialize},
+};
+
 use super::RingBufDescCommonHead;
 
 #[bitsize(64)]
@@ -117,3 +122,5 @@ impl SimpleNicRxQueueDesc {
         self.c3.set_len(val);
     }
 }
+
+impl_desc_serde!(SimpleNicTxQueueDesc, SimpleNicRxQueueDesc);

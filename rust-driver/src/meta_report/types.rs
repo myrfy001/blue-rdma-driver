@@ -185,10 +185,7 @@ impl MetaReportQueue {
     pub(crate) fn pop(&mut self) -> Option<MetaReportQueueDesc> {
         let (first, next) = self.inner.pop_two();
         #[allow(clippy::wildcard_enum_match_arm)] // too verbose
-        match (
-            first.map(MetaReportQueueDescFirst::from),
-            next.map(MetaReportQueueDescNext::from),
-        ) {
+        match (first, next) {
             (None, None) => None,
             (Some(MetaReportQueueDescFirst::PacketInfo(d)), None) if d.ecn_marked() => {
                 Some(MetaReportQueueDesc::CnpPacketInfo(d))

@@ -1,5 +1,8 @@
 use bilge::prelude::*;
 
+use crate::impl_desc_serde;
+use crate::ringbuf_desc::{DescDeserialize, DescSerialize};
+
 use super::RingBufDescCommonHead;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -596,3 +599,11 @@ impl CmdQueueReqDescSetRawPacketReceiveMeta {
         self.c2.set_write_base_addr(val);
     }
 }
+
+impl_desc_serde!(
+    CmdQueueReqDescUpdateMrTable,
+    CmdQueueReqDescUpdatePGT,
+    CmdQueueReqDescQpManagement,
+    CmdQueueReqDescSetNetworkParam,
+    CmdQueueReqDescSetRawPacketReceiveMeta
+);

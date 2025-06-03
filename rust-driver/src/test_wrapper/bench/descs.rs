@@ -1,10 +1,11 @@
-use crate::descriptors::{DescFromBytes, MetaReportQueueDescBthReth};
+use crate::descriptors::MetaReportQueueDescBthReth;
+use crate::ringbuf_desc::DescDeserialize;
 
 pub struct MetaReportQueueDescBthRethWrapper(MetaReportQueueDescBthReth);
 
 impl MetaReportQueueDescBthRethWrapper {
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
-        Self(MetaReportQueueDescBthReth::from_bytes(bytes))
+        Self(MetaReportQueueDescBthReth::deserialize(bytes))
     }
 
     #[inline]

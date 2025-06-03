@@ -20,6 +20,7 @@ pub(crate) use simple_nic::*;
 
 use bilge::prelude::*;
 
+use crate::ringbuf_desc::{DescDeserialize, DescSerialize};
 use crate::send::WorkReqOpCode;
 
 /// Size of a descriptor in bytes.
@@ -27,51 +28,31 @@ pub(crate) const DESC_SIZE: usize = 32;
 
 // NOTE: The `#[bitsize]` macro errors shown by rust-analyzer is a false-positive
 
-/// A trait for converting a 32-byte array into a descriptor type.
-pub(crate) trait DescFromBytes {
-    /// Creates a new descriptor from raw bytes.
-    ///
-    /// # Arguments
-    ///
-    /// * `bytes` - A 32-byte array containing the raw descriptor data
-    ///
-    /// # Safety
-    ///
-    /// This function uses transmute to convert raw bytes into a descriptor.
-    /// The caller must ensure the bytes represent a valid descriptor layout.
-    fn from_bytes(bytes: [u8; DESC_SIZE]) -> Self;
-}
-
-/// Implements the `DescFromBytes` trait for the specified types.
-macro_rules! impl_from_bytes {
+/// Implements the `DescSerde` trait
+#[macro_export]
+macro_rules! impl_desc_serde {
     ($($t:ty),*) => {
         $(
-            impl DescFromBytes for $t {
-                #[allow(unsafe_code)]
-                fn from_bytes(bytes: [u8; DESC_SIZE]) -> Self {
-                    unsafe { std::mem::transmute(bytes) }
-                }
-            }
-        )*
-    }
-}
-
-macro_rules! impl_desc_conversion_untyped {
-    ($($type:ty),*) => {
-        $(
-            const _: () = assert!(std::mem::size_of::<$type>() == DESC_SIZE);
-
-            #[allow(unsafe_code)]
-            impl From<$type> for RingBufDescUntyped {
-                fn from(desc: $type) -> Self {
-                    unsafe { std::mem::transmute(desc) }
+            impl DescSerialize for $t {
+                fn serialize(&self) -> [u8; 32] {
+                    bytemuck::cast([
+                        self.c0.value,
+                        self.c1.value,
+                        self.c2.value,
+                        self.c3.value,
+                    ])
                 }
             }
 
-            #[allow(unsafe_code)]
-            impl From<RingBufDescUntyped> for $type {
-                fn from(desc: RingBufDescUntyped) -> Self {
-                    unsafe { std::mem::transmute(desc) }
+            impl DescDeserialize for $t {
+                fn deserialize(d: [u8; 32]) -> Self {
+                    let t: [u64; 4] = bytemuck::cast(d);
+                    Self {
+                        c0: t[0].into(),
+                        c1: t[1].into(),
+                        c2: t[2].into(),
+                        c3: t[3].into(),
+                    }
                 }
             }
         )*
@@ -108,54 +89,6 @@ impl RingBufDescCommonHead {
         this
     }
 }
-
-/// Untyped ring buffer descriptor
-///
-/// Should have the exact same memory layout of each descriptor
-#[repr(C)]
-#[derive(Debug, Default, Clone, Copy)]
-pub(crate) struct RingBufDescUntyped {
-    /// Remaining bytes of the descriptor
-    rest: [u8; 30],
-    /// Common header fields for the ring buffer descriptor
-    head: RingBufDescCommonHead,
-}
-
-impl RingBufDescUntyped {
-    pub(crate) fn is_valid(&self) -> bool {
-        self.head.valid()
-    }
-
-    pub(crate) fn has_next(&self) -> bool {
-        self.head.has_next()
-    }
-}
-
-#[cfg(test)]
-impl RingBufDescUntyped {
-    pub(crate) fn new_valid_default() -> Self {
-        let mut this = Self::default();
-        this.head.set_valid(true);
-        this
-    }
-}
-
-impl_desc_conversion_untyped!(
-    CmdQueueRespDescOnlyCommonHeader,
-    CmdQueueReqDescUpdateMrTable,
-    CmdQueueReqDescUpdatePGT,
-    CmdQueueReqDescQpManagement,
-    CmdQueueReqDescSetNetworkParam,
-    CmdQueueReqDescSetRawPacketReceiveMeta,
-    SendQueueReqDescSeg0,
-    SendQueueReqDescSeg1,
-    SimpleNicTxQueueDesc,
-    SimpleNicRxQueueDesc,
-    MetaReportQueuePacketBasicInfoDesc,
-    MetaReportQueueReadReqExtendInfoDesc,
-    MetaReportQueueAckDesc,
-    MetaReportQueueAckExtraDesc
-);
 
 #[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
@@ -296,21 +229,4 @@ impl MetaReportQueueDescBthReth {
     }
 }
 
-impl_from_bytes!(MetaReportQueueDescBthReth, SendQueueReqDescSeg0);
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn ring_buf_desc_consume_ok() {
-        let mut head = RingBufDescCommonHead::new_with_op_code(0);
-        head.set_valid(true);
-        let mut desc = RingBufDescUntyped {
-            head,
-            rest: [0; 30],
-        };
-        assert!(desc.is_valid());
-        assert!(!desc.head.valid());
-    }
-}
+impl_desc_serde!(MetaReportQueueDescBthReth);

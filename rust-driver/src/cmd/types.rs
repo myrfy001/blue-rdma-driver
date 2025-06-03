@@ -4,7 +4,7 @@ use crate::{
     descriptors::{
         CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
         CmdQueueReqDescSetRawPacketReceiveMeta, CmdQueueReqDescUpdateMrTable,
-        CmdQueueReqDescUpdatePGT, CmdQueueRespDescOnlyCommonHeader, RingBufDescUntyped,
+        CmdQueueReqDescUpdatePGT, CmdQueueRespDescOnlyCommonHeader,
     },
     device::{
         proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
@@ -12,7 +12,7 @@ use crate::{
     },
     mem::page::ContiguousPages,
     net::config::NetworkConfig,
-    ringbuf_desc::DescRingBuffer,
+    ringbuf_desc::{DescDeserialize, DescRingBuffer},
 };
 
 /// Command queue for submitting commands to the device
@@ -45,11 +45,11 @@ impl CmdQueue {
     /// Produces command descriptors to the queue
     pub(crate) fn push(&mut self, desc: CmdQueueDesc) -> bool {
         match desc {
-            CmdQueueDesc::UpdateMrTable(d) => self.inner.push(d.into()),
-            CmdQueueDesc::UpdatePGT(d) => self.inner.push(d.into()),
-            CmdQueueDesc::ManageQP(d) => self.inner.push(d.into()),
-            CmdQueueDesc::SetNetworkParam(d) => self.inner.push(d.into()),
-            CmdQueueDesc::SetRawPacketReceiveMeta(d) => self.inner.push(d.into()),
+            CmdQueueDesc::UpdateMrTable(d) => self.inner.push(&d),
+            CmdQueueDesc::UpdatePGT(d) => self.inner.push(&d),
+            CmdQueueDesc::ManageQP(d) => self.inner.push(&d),
+            CmdQueueDesc::SetNetworkParam(d) => self.inner.push(&d),
+            CmdQueueDesc::SetRawPacketReceiveMeta(d) => self.inner.push(&d),
         }
     }
 
@@ -65,13 +65,11 @@ impl CmdQueue {
 
 /// Command queue response descriptor type
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct CmdRespQueueDesc(CmdQueueRespDescOnlyCommonHeader);
+pub(crate) struct CmdRespQueueDesc([u8; 32]);
 
-impl std::ops::Deref for CmdRespQueueDesc {
-    type Target = CmdQueueRespDescOnlyCommonHeader;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl DescDeserialize for CmdRespQueueDesc {
+    fn deserialize(d: [u8; 32]) -> Self {
+        Self(d)
     }
 }
 
@@ -89,7 +87,7 @@ impl CmdRespQueue {
 
     /// Tries to poll next valid entry from the queue
     pub(crate) fn try_pop(&mut self) -> Option<CmdRespQueueDesc> {
-        self.inner.pop().map(Into::into).map(CmdRespQueueDesc)
+        self.inner.pop()
     }
 
     /// Return tail pointer

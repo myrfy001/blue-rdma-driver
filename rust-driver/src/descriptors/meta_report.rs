@@ -1,8 +1,12 @@
 use bilge::prelude::*;
 
 use crate::meta_report::{HeaderType, PacketPos};
+use crate::{
+    impl_desc_serde,
+    ringbuf_desc::{DescDeserialize, DescSerialize},
+};
 
-use super::{RingBufDescCommonHead, RingBufDescUntyped};
+use super::RingBufDescCommonHead;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -153,25 +157,33 @@ pub(crate) enum MetaReportQueueDescNext {
     AckExtra(MetaReportQueueAckExtraDesc),
 }
 
-impl From<RingBufDescUntyped> for MetaReportQueueDescFirst {
-    fn from(desc: RingBufDescUntyped) -> Self {
-        let rdma_opcode = RdmaOpCode::from_u8(desc.head.op_code())
-            .unwrap_or_else(|| unreachable!("invalid opcode, desc: {:?}", desc));
+impl DescDeserialize for MetaReportQueueDescFirst {
+    fn deserialize(d: [u8; 32]) -> Self {
+        let head = RingBufDescCommonHead::from(u16::from_le_bytes([d[30], d[31]]));
+        let rdma_opcode = RdmaOpCode::from_u8(head.op_code())
+            .unwrap_or_else(|| unreachable!("invalid opcode, desc: {:?}", d));
         match rdma_opcode {
-            op if rdma_opcode.is_packet() => Self::PacketInfo(desc.into()),
-            op if rdma_opcode.is_ack() => Self::Ack(desc.into()),
+            op if rdma_opcode.is_packet() => {
+                Self::PacketInfo(MetaReportQueuePacketBasicInfoDesc::deserialize(d))
+            }
+            op if rdma_opcode.is_ack() => Self::Ack(MetaReportQueueAckDesc::deserialize(d)),
             _ => unreachable!("opcode unsupported"),
         }
     }
 }
 
-impl From<RingBufDescUntyped> for MetaReportQueueDescNext {
-    fn from(desc: RingBufDescUntyped) -> Self {
-        let rdma_opcode = RdmaOpCode::from_u8(desc.head.op_code())
-            .unwrap_or_else(|| unreachable!("invalid opcode"));
+impl DescDeserialize for MetaReportQueueDescNext {
+    fn deserialize(d: [u8; 32]) -> Self {
+        let head = RingBufDescCommonHead::from(u16::from_le_bytes([d[30], d[31]]));
+        let rdma_opcode =
+            RdmaOpCode::from_u8(head.op_code()).unwrap_or_else(|| unreachable!("invalid opcode"));
         match rdma_opcode {
-            op if rdma_opcode.is_packet() => Self::ReadInfo(desc.into()),
-            op if rdma_opcode.is_ack() => Self::AckExtra(desc.into()),
+            op if rdma_opcode.is_packet() => {
+                Self::ReadInfo(MetaReportQueueReadReqExtendInfoDesc::deserialize(d))
+            }
+            op if rdma_opcode.is_ack() => {
+                Self::AckExtra(MetaReportQueueAckExtraDesc::deserialize(d))
+            }
             _ => unreachable!("opcode unsupported"),
         }
     }
@@ -412,15 +424,21 @@ impl MetaReportQueueReadReqExtendInfoDesc {
     }
 }
 
-#[bitsize(128)]
+#[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
 struct MetaReportQueueAckDescChunk0 {
-    pub now_bitmap: u128,
+    pub now_bitmap_low: u64,
 }
 
 #[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
 struct MetaReportQueueAckDescChunk1 {
+    pub now_bitmap_high: u64,
+}
+
+#[bitsize(64)]
+#[derive(Clone, Copy, DebugBits, FromBits)]
+struct MetaReportQueueAckDescChunk2 {
     pub msn: u16,
     pub qpn: u24,
     pub psn_now: u24,
@@ -428,7 +446,7 @@ struct MetaReportQueueAckDescChunk1 {
 
 #[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
-struct MetaReportQueueAckDescChunk2 {
+struct MetaReportQueueAckDescChunk3 {
     reserved2: u8,
     pub psn_before_slide: u24,
     reserved1: u8,
@@ -446,101 +464,109 @@ pub(crate) struct MetaReportQueueAckDesc {
     c0: MetaReportQueueAckDescChunk0,
     c1: MetaReportQueueAckDescChunk1,
     c2: MetaReportQueueAckDescChunk2,
+    c3: MetaReportQueueAckDescChunk3,
 }
 
 impl MetaReportQueueAckDesc {
     pub(crate) fn is_send_by_local_hw(&self) -> bool {
-        self.c2.is_send_by_local_hw()
+        self.c3.is_send_by_local_hw()
     }
 
     pub(crate) fn set_is_send_by_local_hw(&mut self, val: bool) {
-        self.c2.set_is_send_by_local_hw(val);
+        self.c3.set_is_send_by_local_hw(val);
     }
 
     pub(crate) fn is_send_by_driver(&self) -> bool {
-        self.c2.is_send_by_driver()
+        self.c3.is_send_by_driver()
     }
 
     pub(crate) fn set_is_send_by_driver(&mut self, val: bool) {
-        self.c2.set_is_send_by_driver(val);
+        self.c3.set_is_send_by_driver(val);
     }
 
     pub(crate) fn is_window_slided(&self) -> bool {
-        self.c2.is_window_slided()
+        self.c3.is_window_slided()
     }
 
     pub(crate) fn set_is_window_slided(&mut self, val: bool) {
-        self.c2.set_is_window_slided(val);
+        self.c3.set_is_window_slided(val);
     }
 
     pub(crate) fn is_packet_lost(&self) -> bool {
-        self.c2.is_packet_lost()
+        self.c3.is_packet_lost()
     }
 
     pub(crate) fn set_is_packet_lost(&mut self, val: bool) {
-        self.c2.set_is_packet_lost(val);
+        self.c3.set_is_packet_lost(val);
     }
 
     pub(crate) fn psn_before_slide(&self) -> u32 {
-        self.c2.psn_before_slide().into()
+        self.c3.psn_before_slide().into()
     }
 
     pub(crate) fn set_psn_before_slide(&mut self, val: u32) {
-        self.c2.set_psn_before_slide(u24::masked_new(val));
+        self.c3.set_psn_before_slide(u24::masked_new(val));
     }
 
     pub(crate) fn psn_now(&self) -> u32 {
-        self.c1.psn_now().into()
+        self.c2.psn_now().into()
     }
 
     pub(crate) fn set_psn_now(&mut self, val: u32) {
-        self.c1.set_psn_now(u24::masked_new(val));
+        self.c2.set_psn_now(u24::masked_new(val));
     }
 
     pub(crate) fn qpn(&self) -> u32 {
-        self.c1.qpn().into()
+        self.c2.qpn().into()
     }
 
     pub(crate) fn set_qpn(&mut self, val: u32) {
-        self.c1.set_qpn(u24::masked_new(val));
+        self.c2.set_qpn(u24::masked_new(val));
     }
 
     pub(crate) fn msn(&self) -> u16 {
-        self.c1.msn()
+        self.c2.msn()
     }
 
     pub(crate) fn set_msn(&mut self, val: u16) {
-        self.c1.set_msn(val);
+        self.c2.set_msn(val);
     }
 
     pub(crate) fn now_bitmap(&self) -> u128 {
-        self.c0.now_bitmap()
+        u128::from(self.c1.now_bitmap_high()) << 64 | u128::from(self.c0.now_bitmap_low())
     }
 
     pub(crate) fn set_now_bitmap(&mut self, val: u128) {
-        self.c0.set_now_bitmap(val);
+        self.c0.set_now_bitmap_low(val as u64);
+        self.c1.set_now_bitmap_high((val >> 64) as u64);
     }
 
     fn common_header(&self) -> RingBufDescCommonHead {
-        self.c2.common_header()
+        self.c3.common_header()
     }
 }
 
-#[bitsize(128)]
+#[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
 struct MetaReportQueueAckExtraDescChunk0 {
-    pub pre_bitmap: u128,
+    pub pre_bitmap_low: u64,
 }
 
 #[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
 struct MetaReportQueueAckExtraDescChunk1 {
-    reserved2: u64,
+    pub pre_bitmap_high: u64,
 }
 
 #[bitsize(64)]
 #[derive(Clone, Copy, DebugBits, FromBits)]
 struct MetaReportQueueAckExtraDescChunk2 {
+    reserved2: u64,
+}
+
+#[bitsize(64)]
+#[derive(Clone, Copy, DebugBits, FromBits)]
+struct MetaReportQueueAckExtraDescChunk3 {
     reserved1: u32,
     reserved0: u16,
     pub common_header: RingBufDescCommonHead,
@@ -552,14 +578,23 @@ pub(crate) struct MetaReportQueueAckExtraDesc {
     c0: MetaReportQueueAckExtraDescChunk0,
     c1: MetaReportQueueAckExtraDescChunk1,
     c2: MetaReportQueueAckExtraDescChunk2,
+    c3: MetaReportQueueAckExtraDescChunk3,
 }
 
 impl MetaReportQueueAckExtraDesc {
     pub(crate) fn pre_bitmap(&self) -> u128 {
-        self.c0.pre_bitmap()
+        u128::from(self.c1.pre_bitmap_high()) << 64 | u128::from(self.c0.pre_bitmap_low())
     }
 
     pub(crate) fn set_pre_bitmap(&mut self, val: u128) {
-        self.c0.set_pre_bitmap(val);
+        self.c0.set_pre_bitmap_low(val as u64);
+        self.c1.set_pre_bitmap_high((val >> 64) as u64);
     }
 }
+
+impl_desc_serde!(
+    MetaReportQueuePacketBasicInfoDesc,
+    MetaReportQueueReadReqExtendInfoDesc,
+    MetaReportQueueAckDesc,
+    MetaReportQueueAckExtraDesc
+);

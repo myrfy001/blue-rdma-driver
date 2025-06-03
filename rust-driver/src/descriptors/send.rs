@@ -1,6 +1,10 @@
 use bilge::prelude::*;
 
-use crate::send::WorkReqOpCode;
+use crate::{
+    impl_desc_serde,
+    ringbuf_desc::{DescDeserialize, DescSerialize},
+    send::WorkReqOpCode,
+};
 
 use super::RingBufDescCommonHead;
 
@@ -360,3 +364,5 @@ impl SendQueueReqDescSeg1 {
         self.c0.set_laddr(val);
     }
 }
+
+impl_desc_serde!(SendQueueReqDescSeg0, SendQueueReqDescSeg1);
