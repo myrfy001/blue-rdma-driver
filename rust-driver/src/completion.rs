@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, iter, ops::ControlFlow, sync::Arc};
 
 use bitvec::vec::BitVec;
+use crossbeam_queue::SegQueue;
 use log::trace;
 use parking_lot::Mutex;
 
@@ -434,46 +435,17 @@ impl CompletionQueueTable {
 }
 
 #[derive(Default)]
-pub(crate) struct CompletionQueue1 {
-    inner: Mutex<VecDeque<Completion>>,
-}
-
-impl CompletionQueue1 {
-    pub(crate) fn push_back(&self, event: Completion) {
-        let mut queue = self.inner.lock();
-        queue.push_back(event);
-    }
-
-    pub(crate) fn pop_front(&self) -> Option<Completion> {
-        let mut queue = self.inner.lock();
-        queue.pop_front()
-    }
-
-    pub(crate) fn front(&self) -> Option<Completion> {
-        let queue = self.inner.lock();
-        queue.front().copied()
-    }
-}
-
-#[derive(Default)]
 pub(crate) struct CompletionQueue {
-    inner: Mutex<VecDeque<Completion>>,
+    inner: SegQueue<Completion>,
 }
 
 impl CompletionQueue {
     pub(crate) fn push_back(&self, event: Completion) {
-        let mut queue = self.inner.lock();
-        queue.push_back(event);
+        self.inner.push(event);
     }
 
     pub(crate) fn pop_front(&self) -> Option<Completion> {
-        let mut queue = self.inner.lock();
-        queue.pop_front()
-    }
-
-    pub(crate) fn front(&self) -> Option<Completion> {
-        let queue = self.inner.lock();
-        queue.front().copied()
+        self.inner.pop()
     }
 }
 
