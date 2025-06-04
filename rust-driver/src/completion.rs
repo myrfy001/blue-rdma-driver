@@ -9,6 +9,7 @@ use crate::{
     ack_responder::AckResponse,
     ack_timeout::AckTimeoutTask,
     constants::MAX_CQ_CNT,
+    device::ops::qp_attr,
     qp::{QpAttr, QpTable, QpTableShared},
     spawner::{SingleThreadTaskWorker, TaskTx},
     utils::{Msn, Psn},
@@ -69,32 +70,49 @@ impl SingleThreadTaskWorker for CompletionWorker {
             | CompletionTask::AckSend { qpn, .. }
             | CompletionTask::AckRecv { qpn, .. } => qpn,
         };
-        let Some(tracker) = self.tracker_table.get_qp_mut(qpn) else {
-            return;
-        };
-        let Some(qp_attr) = self.qp_table.get_qp(qpn) else {
-            return;
-        };
+        let tracker = self
+            .tracker_table
+            .get_qp_mut(qpn)
+            .expect("invalid qpn: {qpn}");
+        let qp_attr = self.qp_table.get_qp(qpn).expect("invalid qpn: {qpn}");
         match task {
             CompletionTask::Register { event, .. } => {
                 tracker.append(event);
             }
             CompletionTask::AckSend { base_psn, .. } => {
-                if let Some(send_cq) = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                    tracker.ack_send(Some(base_psn), send_cq, &self.ack_timeout_tx);
+                let handle = qp_attr.send_cq.expect("no associated cq");
+                let send_cq = self.cq_table.get_cq(handle).expect("invalid cq: {handle}");
+                tracker.ack_send(base_psn);
+                while let Some(completion) = tracker.poll_send_completion() {
+                    send_cq.push_back(completion);
+                    self.ack_timeout_tx.send(AckTimeoutTask::ack(qpn));
                 }
             }
             CompletionTask::AckRecv { base_psn, .. } => {
-                let send_cq = qp_attr.send_cq.and_then(|h| self.cq_table.get_cq(h));
-                if let Some(recv_cq) = qp_attr.recv_cq.and_then(|h| self.cq_table.get_cq(h)) {
-                    tracker.ack_recv(
-                        base_psn,
-                        recv_cq,
-                        send_cq,
-                        qpn,
-                        &self.ack_resp_tx,
-                        &self.ack_timeout_tx,
-                    );
+                let send_handle = qp_attr.send_cq.expect("no associated cq");
+                let recv_handle = qp_attr.recv_cq.expect("no associated cq");
+                let send_cq = self
+                    .cq_table
+                    .get_cq(send_handle)
+                    .expect("invalid cq: {send_handle}");
+                let recv_cq = self
+                    .cq_table
+                    .get_cq(recv_handle)
+                    .expect("invalid cq: {send_handle}");
+                tracker.ack_recv(base_psn);
+                while let Some(completion) = tracker.poll_send_completion() {
+                    send_cq.push_back(completion);
+                    self.ack_timeout_tx.send(AckTimeoutTask::ack(qpn));
+                }
+                while let Some((event, completion)) = tracker.poll_recv_completion() {
+                    if event.ack_req {
+                        self.ack_resp_tx.send(AckResponse::Ack {
+                            qpn,
+                            msn: event.meta().msn,
+                            last_psn: event.meta().end_psn,
+                        });
+                    }
+                    recv_cq.push_back(completion);
                 }
             }
         }
@@ -129,29 +147,60 @@ impl EventWithQpn {
     }
 }
 
+/// Used for merge a read request/response
+#[derive(Default)]
+struct MergeQueue {
+    send: VecDeque<SendEvent>,
+    recv: VecDeque<RecvEvent>,
+    recv_read_resp: VecDeque<RecvEvent>,
+}
+
+impl MergeQueue {
+    fn push_send(&mut self, event: SendEvent) {
+        self.send.push_back(event);
+    }
+
+    fn push_recv(&mut self, event: RecvEvent) {
+        match event.op {
+            RecvEventOp::ReadResp => {
+                self.recv_read_resp.push_back(event);
+            }
+            RecvEventOp::Write
+            | RecvEventOp::WriteWithImm { .. }
+            | RecvEventOp::Recv
+            | RecvEventOp::RecvWithImm { .. }
+            | RecvEventOp::RecvRead => {
+                self.recv.push_back(event);
+            }
+        }
+    }
+
+    fn pop_send(&mut self) -> Option<SendEvent> {
+        let event = self.send.front()?;
+        match event.op {
+            SendEventOp::WriteSignaled | SendEventOp::SendSignaled => self.send.pop_front(),
+            SendEventOp::ReadSignaled => self
+                .recv_read_resp
+                .pop_front()
+                .and_then(|_e| self.send.pop_front()),
+        }
+    }
+
+    fn pop_recv(&mut self) -> Option<RecvEvent> {
+        self.recv.pop_front()
+    }
+}
+
 #[derive(Default)]
 struct QueuePairMessageTracker {
     send: MessageTracker<SendEvent>,
     recv: MessageTracker<RecvEvent>,
     read_resp_queue: VecDeque<RecvEvent>,
     post_recv_queue: VecDeque<PostRecvEvent>,
+    merge: MergeQueue,
 }
 
 impl QueuePairMessageTracker {
-    fn new(
-        send: MessageTracker<SendEvent>,
-        recv: MessageTracker<RecvEvent>,
-        read_resp_queue: VecDeque<RecvEvent>,
-        post_recv_queue: VecDeque<PostRecvEvent>,
-    ) -> Self {
-        Self {
-            send,
-            recv,
-            read_resp_queue,
-            post_recv_queue,
-        }
-    }
-
     fn append(&mut self, event: Event) {
         match event {
             Event::Send(x) => self.send.append(x),
@@ -162,96 +211,53 @@ impl QueuePairMessageTracker {
         }
     }
 
-    fn ack_send(
-        &mut self,
-        psn: Option<Psn>,
-        send_cq: &CompletionQueue,
-        ack_timeout_tx: &TaskTx<AckTimeoutTask>,
-    ) {
-        if let Some(psn) = psn {
-            self.send.ack(psn);
-        }
-        while let Some(event) = self.send.peek() {
-            trace!("ack send event: {event:?}");
-            match event.op {
-                SendEventOp::WriteSignaled | SendEventOp::SendSignaled => {
-                    let x = self.send.pop().unwrap_or_else(|| unreachable!());
-                    let completion = match x.op {
-                        SendEventOp::WriteSignaled => Completion::RdmaWrite { wr_id: x.wr_id },
-                        SendEventOp::SendSignaled => Completion::Send { wr_id: x.wr_id },
-                        SendEventOp::ReadSignaled => unreachable!(),
-                    };
-                    ack_timeout_tx.send(AckTimeoutTask::ack(x.qpn));
-                    send_cq.push_back(completion);
-                }
-                SendEventOp::ReadSignaled => {
-                    if let Some(recv_event) = self.read_resp_queue.pop_front() {
-                        let x = self.send.pop().unwrap_or_else(|| unreachable!());
-                        let completion = Completion::RdmaRead { wr_id: x.wr_id };
-                        send_cq.push_back(completion);
-                    } else {
-                        break;
-                    }
-                }
-            }
+    fn ack_send(&mut self, psn: Psn) {
+        self.send.ack(psn);
+        while let Some(event) = self.send.pop() {
+            self.merge.push_send(event);
         }
     }
 
-    fn ack_recv(
-        &mut self,
-        psn: Psn,
-        recv_cq: &CompletionQueue,
-        send_cq: Option<&CompletionQueue>,
-        qpn: u32,
-        ack_resp_tx: &TaskTx<AckResponse>,
-        ack_timeout_tx: &TaskTx<AckTimeoutTask>,
-    ) {
+    fn ack_recv(&mut self, psn: Psn) {
         self.recv.ack(psn);
         while let Some(event) = self.recv.pop() {
-            match event.op {
-                RecvEventOp::WriteWithImm { imm } => {
-                    let completion = Completion::RecvRdmaWithImm { imm };
-                    recv_cq.push_back(completion);
-                }
-                RecvEventOp::Recv => {
-                    let x = self
-                        .post_recv_queue
-                        .pop_back()
-                        .unwrap_or_else(|| unreachable!("no posted recv wr"));
-                    let completion = Completion::Recv {
-                        wr_id: x.wr_id,
-                        imm: None,
-                    };
-                    recv_cq.push_back(completion);
-                }
-                RecvEventOp::RecvWithImm { imm } => {
-                    let x = self
-                        .post_recv_queue
-                        .pop_back()
-                        .unwrap_or_else(|| unreachable!("no posted recv wr"));
-                    let completion = Completion::Recv {
-                        wr_id: x.wr_id,
-                        imm: Some(imm),
-                    };
-                    recv_cq.push_back(completion);
-                }
-                RecvEventOp::ReadResp => {
-                    self.read_resp_queue.push_back(event);
-                    // check if the read  completion could be updated
-                    if let Some(cq) = send_cq {
-                        self.ack_send(None, cq, ack_timeout_tx);
-                    }
-                }
-                RecvEventOp::RecvRead | RecvEventOp::Write => {}
-            }
-            if event.ack_req {
-                ack_resp_tx.send(AckResponse::Ack {
-                    qpn,
-                    msn: event.meta().msn,
-                    last_psn: event.meta().end_psn,
-                });
-            }
+            self.merge.push_recv(event);
         }
+    }
+
+    fn poll_send_completion(&mut self) -> Option<Completion> {
+        let event = self.merge.pop_send()?;
+        let x = self.send.pop().unwrap_or_else(|| unreachable!());
+        Some(match x.op {
+            SendEventOp::WriteSignaled => Completion::RdmaWrite { wr_id: x.wr_id },
+            SendEventOp::SendSignaled => Completion::Send { wr_id: x.wr_id },
+            SendEventOp::ReadSignaled => Completion::RdmaRead { wr_id: x.wr_id },
+        })
+    }
+
+    fn poll_recv_completion(&mut self) -> Option<(RecvEvent, Completion)> {
+        let event = self.merge.pop_recv()?;
+        let completion = match event.op {
+            RecvEventOp::WriteWithImm { imm } => Some(Completion::RecvRdmaWithImm { imm }),
+            RecvEventOp::Recv => {
+                let x = self.post_recv_queue.pop_back().expect("no posted recv wr");
+                Some(Completion::Recv {
+                    wr_id: x.wr_id,
+                    imm: None,
+                })
+            }
+            RecvEventOp::RecvWithImm { imm } => {
+                let x = self.post_recv_queue.pop_back().expect("no posted recv wr");
+                Some(Completion::Recv {
+                    wr_id: x.wr_id,
+                    imm: Some(imm),
+                })
+            }
+            RecvEventOp::ReadResp => unreachable!("invalid branch"),
+            RecvEventOp::RecvRead | RecvEventOp::Write => None,
+        };
+
+        completion.map(|c| (event, c))
     }
 }
 

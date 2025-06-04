@@ -93,7 +93,6 @@
     clippy::unnecessary_self_imports,
     clippy::unneeded_field_pattern,
     // clippy::unreachable, allow unreachable panic, which is out of expectation
-    clippy::unwrap_in_result,
     clippy::unwrap_used,
     // clippy::use_debug, debug is allow for debug log
     clippy::verbose_file_reads,
