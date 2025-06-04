@@ -7,7 +7,7 @@ use crate::{
     completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
     constants::PSN_MASK,
     fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
-    qp::{num_psn, QpAttr, QpTable, QpTableShared, SqContext},
+    qp::{num_psn, QpAttr, QpTable, QpTableShared, SendQueueContext},
     retransmit::{PacketRetransmitTask, SendQueueElem},
     send::{ChunkPos, QpParams, SendHandle, WorkReqOpCode, WrChunkBuilder},
     spawner::{SingleThreadTaskWorker, TaskTx},
@@ -40,7 +40,7 @@ impl RdmaWriteTask {
 }
 
 pub(crate) struct RdmaWriteWorker {
-    sq_ctx_table: QpTable<SqContext>,
+    sq_ctx_table: QpTable<SendQueueContext>,
     qp_attr_table: QpTableShared<QpAttr>,
     send_handle: SendHandle,
     timeout_tx: TaskTx<AckTimeoutTask>,

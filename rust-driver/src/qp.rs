@@ -66,19 +66,18 @@ impl QpManager {
 }
 
 #[derive(Default, Debug)]
-pub(crate) struct SqContext {
+pub(crate) struct SendQueueContext {
     msn: u16,
     psn: Psn,
-    base_psn_acked: Psn,
-    base_msn_acked: u16,
+    psn_acked: Psn,
+    msn_acked: u16,
 }
 
-impl SqContext {
-    // FIXME: refactor `next_wr`
+impl SendQueueContext {
     #[allow(clippy::similar_names)]
     pub(crate) fn next_wr(&mut self, num_psn: u32) -> Option<(u16, Psn)> {
-        let outstanding_num_psn = self.psn - self.base_psn_acked;
-        let outstanding_num_msn = self.msn.wrapping_sub(self.base_msn_acked);
+        let outstanding_num_psn = self.psn - self.psn_acked;
+        let outstanding_num_msn = self.msn.wrapping_sub(self.msn_acked);
         if (outstanding_num_psn + num_psn).into_inner() as usize > MAX_PSN_WINDOW
             || outstanding_num_msn as usize >= MAX_SEND_WR
         {
@@ -95,11 +94,11 @@ impl SqContext {
     }
 
     pub(crate) fn update_psn_acked(&mut self, psn: Psn) {
-        self.base_psn_acked = psn;
+        self.psn_acked = psn;
     }
 
     pub(crate) fn update_msn_acked(&mut self, msn: u16) {
-        self.base_msn_acked = msn;
+        self.msn_acked = msn;
     }
 }
 
