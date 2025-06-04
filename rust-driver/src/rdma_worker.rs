@@ -26,6 +26,10 @@ pub(crate) enum RdmaWriteTask {
         qpn: u32,
         base_psn: Psn,
     },
+    NewComplete {
+        qpn: u32,
+        msn: u16,
+    },
 }
 
 impl RdmaWriteTask {
@@ -36,6 +40,10 @@ impl RdmaWriteTask {
 
     pub(crate) fn new_ack(qpn: u32, base_psn: Psn) -> Self {
         Self::Ack { qpn, base_psn }
+    }
+
+    pub(crate) fn new_complete(qpn: u32, msn: u16) -> Self {
+        Self::NewComplete { qpn, msn }
     }
 }
 
@@ -67,9 +75,12 @@ impl SingleThreadTaskWorker for RdmaWriteWorker {
                 resp_tx.send(resp);
             }
             RdmaWriteTask::Ack { qpn, base_psn } => {
-                if let Some(ctx) = self.sq_ctx_table.get_qp_mut(qpn) {
-                    ctx.update_psn_acked(base_psn);
-                }
+                let ctx = self.sq_ctx_table.get_qp_mut(qpn).expect("invalid qpn");
+                ctx.update_psn_acked(base_psn);
+            }
+            RdmaWriteTask::NewComplete { qpn, msn } => {
+                let ctx = self.sq_ctx_table.get_qp_mut(qpn).expect("invalid qpn");
+                ctx.update_msn_acked(msn);
             }
         }
     }

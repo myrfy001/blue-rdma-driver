@@ -11,6 +11,7 @@ use crate::{
     constants::MAX_CQ_CNT,
     device::ops::qp_attr,
     qp::{QpAttr, QpTable, QpTableShared},
+    rdma_worker::RdmaWriteTask,
     spawner::{SingleThreadTaskWorker, TaskTx},
     utils::{Msn, Psn},
 };
@@ -59,6 +60,7 @@ pub(crate) struct CompletionWorker {
     qp_table: QpTableShared<QpAttr>,
     ack_resp_tx: TaskTx<AckResponse>,
     ack_timeout_tx: TaskTx<AckTimeoutTask>,
+    rdma_write_tx: TaskTx<RdmaWriteTask>,
 }
 
 impl SingleThreadTaskWorker for CompletionWorker {
@@ -83,9 +85,11 @@ impl SingleThreadTaskWorker for CompletionWorker {
                 let handle = qp_attr.send_cq.expect("no associated cq");
                 let send_cq = self.cq_table.get_cq(handle).expect("invalid cq: {handle}");
                 tracker.ack_send(base_psn);
-                while let Some(completion) = tracker.poll_send_completion() {
+                while let Some((event, completion)) = tracker.poll_send_completion() {
                     send_cq.push_back(completion);
                     self.ack_timeout_tx.send(AckTimeoutTask::ack(qpn));
+                    self.rdma_write_tx
+                        .send(RdmaWriteTask::new_complete(qpn, event.meta().msn));
                 }
             }
             CompletionTask::AckRecv { base_psn, .. } => {
@@ -100,9 +104,11 @@ impl SingleThreadTaskWorker for CompletionWorker {
                     .get_cq(recv_handle)
                     .expect("invalid cq: {send_handle}");
                 tracker.ack_recv(base_psn);
-                while let Some(completion) = tracker.poll_send_completion() {
+                while let Some((event, completion)) = tracker.poll_send_completion() {
                     send_cq.push_back(completion);
                     self.ack_timeout_tx.send(AckTimeoutTask::ack(qpn));
+                    self.rdma_write_tx
+                        .send(RdmaWriteTask::new_complete(qpn, event.meta().msn));
                 }
                 while let Some((event, completion)) = tracker.poll_recv_completion() {
                     if event.ack_req {
@@ -125,6 +131,7 @@ impl CompletionWorker {
         qp_table: QpTableShared<QpAttr>,
         ack_resp_tx: TaskTx<AckResponse>,
         ack_timeout_tx: TaskTx<AckTimeoutTask>,
+        rdma_write_tx: TaskTx<RdmaWriteTask>,
     ) -> Self {
         Self {
             tracker_table: QpTable::new(),
@@ -132,6 +139,7 @@ impl CompletionWorker {
             qp_table,
             ack_resp_tx,
             ack_timeout_tx,
+            rdma_write_tx,
         }
     }
 }
@@ -225,14 +233,16 @@ impl QueuePairMessageTracker {
         }
     }
 
-    fn poll_send_completion(&mut self) -> Option<Completion> {
+    fn poll_send_completion(&mut self) -> Option<(SendEvent, Completion)> {
         let event = self.merge.pop_send()?;
         let x = self.send.pop().unwrap_or_else(|| unreachable!());
-        Some(match x.op {
+        let completion = match x.op {
             SendEventOp::WriteSignaled => Completion::RdmaWrite { wr_id: x.wr_id },
             SendEventOp::SendSignaled => Completion::Send { wr_id: x.wr_id },
             SendEventOp::ReadSignaled => Completion::RdmaRead { wr_id: x.wr_id },
-        })
+        };
+
+        Some((event, completion))
     }
 
     fn poll_recv_completion(&mut self) -> Option<(RecvEvent, Completion)> {

@@ -46,13 +46,12 @@ pub(crate) trait SingleThreadTaskWorker {
 
     fn process(&mut self, task: Self::Task);
 
-    fn spawn(mut self, name: &str, abort: AbortSignal) -> TaskTx<Self::Task>
+    fn spawn(mut self, rx: TaskRx<Self::Task>, name: &str, abort: AbortSignal)
     where
         Self: Sized + Send + 'static,
         Self::Task: Send + 'static,
     {
         let name = name.to_owned();
-        let (tx, rx) = flume::unbounded::<Self::Task>();
         let abort = AbortSignal::new();
         let abort_c = abort.clone();
         let _handle = std::thread::Builder::new()
@@ -63,7 +62,7 @@ pub(crate) trait SingleThreadTaskWorker {
                     if abort.should_abort() {
                         break;
                     }
-                    if let Ok(task) = rx.recv() {
+                    if let Some(task) = rx.recv() {
                         self.process(task);
                     } else {
                         error!("failed to recv task from channel");
@@ -73,22 +72,19 @@ pub(crate) trait SingleThreadTaskWorker {
                 info!("worker {name} exited");
             })
             .expect("failed to spawn worker");
-
-        TaskTx { inner: tx }
     }
 
     fn spawn_polling(
         mut self,
+        rx: TaskRx<Self::Task>,
         name: &str,
         abort: AbortSignal,
         interval: Duration,
-    ) -> TaskTx<Self::Task>
-    where
+    ) where
         Self: Sized + Send + 'static,
         Self::Task: Send + 'static,
     {
         let name = name.to_owned();
-        let (tx, rx) = flume::unbounded::<Self::Task>();
         let abort = AbortSignal::new();
         let abort_c = abort.clone();
         let _handle = std::thread::Builder::new()
@@ -107,8 +103,6 @@ pub(crate) trait SingleThreadTaskWorker {
                 info!("worker {name} exited");
             })
             .expect("failed to spawn worker");
-
-        TaskTx { inner: tx }
     }
 }
 
@@ -130,6 +124,25 @@ impl<T> Clone for TaskTx<T> {
             inner: self.inner.clone(),
         }
     }
+}
+
+pub(crate) struct TaskRx<T> {
+    inner: flume::Receiver<T>,
+}
+
+impl<T> TaskRx<T> {
+    fn recv(&self) -> Option<T> {
+        self.inner.recv().ok()
+    }
+
+    fn try_iter(&self) -> flume::TryIter<'_, T> {
+        self.inner.try_iter()
+    }
+}
+
+pub(crate) fn task_channel<T>() -> (TaskTx<T>, TaskRx<T>) {
+    let (tx, rx) = flume::unbounded();
+    (TaskTx { inner: tx }, TaskRx { inner: rx })
 }
 
 #[derive(Debug, Clone)]

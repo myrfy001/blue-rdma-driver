@@ -35,7 +35,7 @@ use crate::{
     ringbuf_desc::DescRingBufAllocator,
     send::{self, SendHandle},
     simple_nic::SimpleNicController,
-    spawner::{AbortSignal, SingleThreadTaskWorker, TaskTx},
+    spawner::{task_channel, AbortSignal, SingleThreadTaskWorker, TaskTx},
     types::{RecvWr, SendWr, SendWrBase, SendWrRdma},
 };
 
@@ -103,6 +103,12 @@ where
             .take(mode.num_channel())
             .collect::<Result<_, _>>()?;
 
+        let (rdma_write_tx, rdma_write_rx) = task_channel();
+        let (completion_tx, completion_rx) = task_channel();
+        let (ack_timeout_tx, ack_timeout_rx) = task_channel();
+        let (packet_retransmit_tx, packet_retransmit_rx) = task_channel();
+        let (ack_tx, ack_rx) = task_channel();
+
         let abort = AbortSignal::new();
         let rx_buffer = rb_allocator.alloc()?;
         let rx_buffer_pa = rx_buffer.phys_addr;
@@ -119,31 +125,38 @@ where
         )?;
         let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
         let handle = send::spawn(&adaptor, send_bufs, mode, &abort)?;
-        let ack_tx = AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx))
-            .spawn("AckResponder", abort.clone());
-        let packet_retransmit_tx = PacketRetransmitWorker::new(handle.clone())
-            .spawn("PacketRetransmitWorker", abort.clone());
-        let ack_timeout_tx = QpAckTimeoutWorker::new(packet_retransmit_tx.clone(), config.ack())
-            .spawn_polling(
-                "QpAckTimeoutWorker",
-                abort.clone(),
-                Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
-            );
-        let completion_tx = CompletionWorker::new(
-            cq_table.clone_arc(),
-            qp_attr_table.clone(),
-            ack_tx.clone(),
-            ack_timeout_tx.clone(),
-        )
-        .spawn("CompletionWorker", abort.clone());
-        let rdma_write_tx = RdmaWriteWorker::new(
+        AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx)).spawn(
+            ack_rx,
+            "AckResponder",
+            abort.clone(),
+        );
+        PacketRetransmitWorker::new(handle.clone()).spawn(
+            packet_retransmit_rx,
+            "PacketRetransmitWorker",
+            abort.clone(),
+        );
+        QpAckTimeoutWorker::new(packet_retransmit_tx.clone(), config.ack()).spawn_polling(
+            ack_timeout_rx,
+            "QpAckTimeoutWorker",
+            abort.clone(),
+            Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
+        );
+        RdmaWriteWorker::new(
             qp_attr_table.clone(),
             handle,
             ack_timeout_tx.clone(),
             packet_retransmit_tx.clone(),
             completion_tx.clone(),
         )
-        .spawn("RdmaWriteWorker", abort.clone());
+        .spawn(rdma_write_rx, "RdmaWriteWorker", abort.clone());
+        CompletionWorker::new(
+            cq_table.clone_arc(),
+            qp_attr_table.clone(),
+            ack_tx.clone(),
+            ack_timeout_tx.clone(),
+            rdma_write_tx.clone(),
+        )
+        .spawn(completion_rx, "CompletionWorker", abort.clone());
         meta_report::spawn(
             &adaptor,
             meta_bufs,
