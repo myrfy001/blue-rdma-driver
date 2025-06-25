@@ -842,6 +842,7 @@ mod tests {
             };
             client.send(msg);
         });
+        std::thread::sleep(Duration::from_millis(1));
 
         let received: TestMessage = server.recv().unwrap();
         assert_eq!(
@@ -922,7 +923,7 @@ mod tests {
         );
         let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
         dev0.dev.post_send(dev0.qpn, wr.into());
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
@@ -954,7 +955,7 @@ mod tests {
             let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
             dev0.dev.post_send(dev0.qpn, wr.into());
         }
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf1.iter().all(|x| *x == 1));
         for _ in 0..NUM_WRITES {
             assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
@@ -984,7 +985,7 @@ mod tests {
         );
         let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
         dev0.dev.post_send(dev0.qpn, wr.into());
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf0.iter().all(|x| *x == 1));
     }
 
@@ -1008,7 +1009,7 @@ mod tests {
         );
         let wr = SendWrRdma::new_from_base(wr_base, buf1.as_ptr() as u64, buf1.len() as u32);
         dev0.dev.post_send(dev0.qpn, wr.into());
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf0.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 0);
@@ -1076,7 +1077,7 @@ mod tests {
             WorkReqOpCode::Send,
         );
         dev0.dev.post_send(dev0.qpn, wr.into());
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf1.iter().all(|x| *x == 1));
         assert_eq!(dev0.dev.poll_cq(dev0.cq, 1).len(), 1);
         assert_eq!(dev1.dev.poll_cq(dev1.cq, 1).len(), 1);
@@ -1118,7 +1119,7 @@ mod tests {
             );
             dev0.dev.post_send(dev0.qpn, wr.into());
         }
-        thread::sleep(Duration::from_millis(1));
+        thread::sleep(Duration::from_millis(10));
         assert!(buf1.iter().all(|x| *x == 1));
 
         for _ in 0..NUM_SEND_RECV {
