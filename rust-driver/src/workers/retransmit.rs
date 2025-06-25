@@ -4,10 +4,12 @@ use log::debug;
 
 use crate::{
     constants::{MAX_PSN_WINDOW, MAX_QP_CNT},
-    fragmenter::WrPacketFragmenter,
-    qp::{qpn_index, QpTable},
-    types::SendWrRdma,
-    utils::Psn,
+    rdma_utils::{
+        fragmenter::WrPacketFragmenter,
+        psn::Psn,
+        qp::{qpn_index, QpTable},
+        types::SendWrRdma,
+    },
     workers::{
         send::{QpParams, SendHandle, WorkReqOpCode},
         spawner::SingleThreadTaskWorker,
@@ -174,7 +176,7 @@ impl SendQueueElem {
 mod tests {
     use super::*;
     use crate::{
-        types::SendWrBase,
+        rdma_utils::types::SendWrBase,
         workers::send::{QpParams, SendHandle},
     };
     use std::sync::{Arc, Mutex};

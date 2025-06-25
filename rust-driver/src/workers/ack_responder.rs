@@ -15,9 +15,7 @@ use pnet::{
 use crate::{
     constants::{CARD_MAC_ADDRESS, CARD_MAC_ADDRESS_OCTETS, PSN_MASK},
     net::simple_nic::FrameTx,
-    qp::QpTableShared,
-    types::QpAttr,
-    utils::Psn,
+    rdma_utils::{psn::Psn, qp::QpTableShared, types::QpAttr},
     workers::spawner::SingleThreadTaskWorker,
 };
 

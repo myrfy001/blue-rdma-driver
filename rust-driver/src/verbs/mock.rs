@@ -25,8 +25,14 @@ use std::{
 use crate::{
     csr::DeviceAdaptor,
     error::{RdmaError, Result},
-    pd::PdTable,
-    types::ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr},
+    rdma_utils::{
+        pd::PdTable,
+        qp::QpTable,
+        types::{
+            ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr},
+            RecvWr, SendWr,
+        },
+    },
 };
 
 use bincode::{Decode, Encode};
@@ -42,8 +48,6 @@ use crate::{
         virt_to_phy::{AddressResolver, PhysAddrResolverLinuxX86},
         DmaBuf, DmaBufAllocator, MemoryPinner, UmemHandler,
     },
-    qp::{qpn_index, QpTable},
-    types::{RecvWr, SendWr},
     workers::{completion::Completion, send::WorkReqOpCode},
 };
 
@@ -811,7 +815,7 @@ impl Inner {
 
 #[cfg(test)]
 mod tests {
-    use crate::types::{SendWrBase, SendWrRdma};
+    use crate::rdma_utils::types::{SendWrBase, SendWrRdma};
 
     use super::*;
     use bincode::{Decode, Encode};

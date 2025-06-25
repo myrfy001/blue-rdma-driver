@@ -12,10 +12,12 @@ use log::{debug, error};
 
 use crate::{
     csr::DeviceAdaptor,
-    psn_tracker::{LocalAckTracker, RemoteAckTracker},
-    qp::QpTable,
-    types::{SendWrBase, SendWrRdma},
-    utils::Psn,
+    rdma_utils::{
+        psn::Psn,
+        psn_tracker::{LocalAckTracker, RemoteAckTracker},
+        qp::QpTable,
+        types::{SendWrBase, SendWrRdma},
+    },
     workers::{
         ack_responder::AckResponse,
         completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
@@ -336,7 +338,7 @@ impl MetaHandler {
 #[cfg(test)]
 mod test {
     use crate::{
-        psn_tracker::{LocalAckTracker, RemoteAckTracker},
+        rdma_utils::psn_tracker::{LocalAckTracker, RemoteAckTracker},
         workers::spawner::{task_channel, TaskRx},
     };
 

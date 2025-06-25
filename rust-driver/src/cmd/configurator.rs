@@ -10,17 +10,16 @@ use parking_lot::Mutex;
 
 use crate::{
     constants::CARD_MAC_ADDRESS,
+    csr::{
+        proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
+        CsrBaseAddrAdaptor, CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
+    },
     descriptors::{
         cmd::{CmdQueueReqDescUpdateMrTable, CmdQueueReqDescUpdatePGT},
         CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
         CmdQueueReqDescSetRawPacketReceiveMeta,
     },
-    csr::{
-        proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
-        CsrBaseAddrAdaptor, CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
-    },
     mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
-    mtt::Mtt,
     net::config::NetworkConfig,
     ringbuf::DescRingBuffer,
 };

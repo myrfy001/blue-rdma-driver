@@ -7,9 +7,12 @@ use parking_lot::Mutex;
 
 use crate::{
     constants::MAX_CQ_CNT,
-    qp::{QpTable, QpTableShared},
-    types::QpAttr,
-    utils::{Msn, Psn},
+    rdma_utils::{
+        msn::Msn,
+        psn::Psn,
+        qp::{QpTable, QpTableShared},
+        types::QpAttr,
+    },
     workers::{
         ack_responder::AckResponse,
         qp_timeout::AckTimeoutTask,

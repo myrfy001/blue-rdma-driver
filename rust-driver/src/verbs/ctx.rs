@@ -18,19 +18,21 @@ use crate::{
         get_num_page, page::PageAllocator, pin_pages, virt_to_phy::AddressResolver, DmaBuf,
         DmaBufAllocator, MemoryPinner, PageWithPhysAddr, UmemHandler,
     },
-    mtt::{Mtt, PgtEntry},
     net::recv_chan::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWrQueueTable, TcpChannel,
     },
     net::simple_nic::SimpleNicController,
     net::{config::NetworkConfig, reader::NetConfigReader},
-    pd::PdTable,
-    qp::{QpManager, QpTableShared},
-    ringbuf::DescRingBufAllocator,
-    types::{
-        ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr},
-        QpAttr, RecvWr, SendWr, SendWrBase, SendWrRdma,
+    rdma_utils::{
+        mtt::{Mtt, PgtEntry},
+        pd::PdTable,
+        qp::{QpManager, QpTableShared},
+        types::{
+            ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr},
+            QpAttr, RecvWr, SendWr, SendWrBase, SendWrRdma,
+        },
     },
+    ringbuf::DescRingBufAllocator,
     workers::{
         ack_responder::AckResponder,
         completion::{

@@ -4,10 +4,12 @@ use parking_lot::Mutex;
 
 use crate::{
     constants::PSN_MASK,
-    fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
-    qp::{num_psn, QpTable, QpTableShared, SendQueueContext},
-    types::{QpAttr, SendWrRdma},
-    utils::Psn,
+    rdma_utils::{
+        fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
+        psn::Psn,
+        qp::{num_psn, QpTable, QpTableShared, SendQueueContext},
+        types::{QpAttr, SendWrRdma},
+    },
     workers::{
         completion::{Completion, CompletionTask, Event, MessageMeta, SendEvent, SendEventOp},
         qp_timeout::AckTimeoutTask,
@@ -244,7 +246,7 @@ mod tests {
     use super::*;
     use crate::{
         net::config::MacAddress,
-        types::SendWrBase,
+        rdma_utils::types::SendWrBase,
         workers::spawner::{task_channel, TaskRx},
     };
     use std::{net::Ipv4Addr, str::FromStr, sync::Arc};

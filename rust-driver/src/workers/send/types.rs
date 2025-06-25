@@ -4,9 +4,8 @@ use crossbeam_deque::{Injector, Stealer, Worker};
 
 use crate::{
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-    qp::convert_ibv_mtu_to_u16,
+    rdma_utils::{psn::Psn, qp::convert_ibv_mtu_to_u16},
     ringbuf::{DescRingBuffer, DescSerialize},
-    utils::Psn,
 };
 
 /// Injector

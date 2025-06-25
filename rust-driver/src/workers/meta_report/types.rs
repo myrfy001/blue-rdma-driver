@@ -5,8 +5,8 @@ use log::error;
 use crate::{
     constants::PSN_MASK,
     csr::{proxy::MetaReportQueueProxy, CsrReaderAdaptor},
+    rdma_utils::psn::Psn,
     ringbuf::DescRingBuffer,
-    utils::Psn,
 };
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
     },
     mem::DmaBuf,
     workers::{
-        ack_responder::AckResponse, qp_timeout::AckTimeoutTask, completion::CompletionTask,
+        ack_responder::AckResponse, completion::CompletionTask, qp_timeout::AckTimeoutTask,
         rdma::RdmaWriteTask, retransmit::PacketRetransmitTask,
     },
 };

@@ -10,7 +10,7 @@ use bincode::{Decode, Encode};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::rdma_utils::{
     qp::{qpn_index, QpTable},
     types::RecvWr,
 };

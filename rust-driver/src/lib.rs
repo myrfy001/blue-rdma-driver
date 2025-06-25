@@ -172,21 +172,13 @@ mod csr;
 mod descriptors;
 /// Error types and handling
 mod error;
-mod fragmenter;
 /// Memory operation components
 #[allow(unsafe_code)]
 mod mem;
-/// Memory translation table
-mod mtt;
-#[allow(unused)]
 /// Network implementations
 pub mod net;
-mod pd;
-mod psn_tracker;
-mod qp;
+pub(crate) mod rdma_utils;
 mod ringbuf;
-mod types;
-mod utils;
 mod verbs;
 mod workers;
 

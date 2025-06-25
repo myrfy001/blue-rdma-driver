@@ -9,7 +9,8 @@ use crate::constants::{
     TEST_CARD_IP_ADDRESS,
 };
 use crate::csr::emulated::EmulatedDevice;
-use crate::types::ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr};
+use crate::rdma_utils::types::ibv_qp_attr::{IbvQpAttr, IbvQpInitAttr};
+use crate::rdma_utils::types::{RecvWr, SendWr};
 use crate::RdmaCtxOps;
 use crate::{
     config::{ConfigLoader, DeviceConfig},
@@ -18,8 +19,7 @@ use crate::{
         EmulatedUmemHandler,
     },
     net::config::{MacAddress, NetworkConfig},
-    types::{RecvWr, SendWr},
-    workers::{qp_timeout::AckTimeoutConfig, completion::Completion},
+    workers::{completion::Completion, qp_timeout::AckTimeoutConfig},
 };
 
 use super::dev::{EmulatedHwDevice, PciHwDevice};

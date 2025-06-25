@@ -2,7 +2,7 @@ use bitvec::{bits, order::Lsb0, vec::BitVec, view::BitView};
 
 use crate::{
     constants::{MAX_PSN_WINDOW, PSN_MASK},
-    utils::Psn,
+    rdma_utils::psn::Psn,
 };
 
 #[derive(Debug, Default)]

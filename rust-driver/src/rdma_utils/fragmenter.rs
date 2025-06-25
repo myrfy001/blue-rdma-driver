@@ -1,10 +1,9 @@
 use crate::{
     constants::{PSN_MASK, WR_CHUNK_SIZE},
-    qp::convert_ibv_mtu_to_u16,
-    types::SendWrRdma,
-    utils::Psn,
     workers::send::{ChunkPos, QpParams, WithIbvParams, WrChunk, WrChunkBuilder},
 };
+
+use super::{psn::Psn, qp::convert_ibv_mtu_to_u16, types::SendWrRdma};
 
 pub(crate) struct WrChunkFragmenter {
     inner: ChunkFragmenter,

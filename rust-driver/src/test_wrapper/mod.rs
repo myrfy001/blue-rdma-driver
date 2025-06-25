@@ -23,8 +23,8 @@ use crate::{
     cmd::CommandConfigurator,
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
     net::config::{MacAddress, NetworkConfig},
+    rdma_utils::psn::Psn,
     ringbuf::{DescRingBufAllocator, DescRingBuffer},
-    utils::Psn,
     verbs::dev::{EmulatedHwDevice, HwDevice},
     workers::send::{ChunkPos, QpParams, SendQueue, SendQueueDesc, WorkReqOpCode, WrChunkBuilder},
 };
