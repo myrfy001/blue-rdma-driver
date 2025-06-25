@@ -61,6 +61,8 @@ impl PciHwDevice {
     pub(crate) fn set_custom(&self) -> io::Result<()> {
         use log::info;
 
+        use crate::csr::hardware::CustomCsrConfigurator;
+
         let mut cfg = CustomCsrConfigurator::new(&self.sysfs_path)?;
         if std::env::var("ENABLE_LOOPBACK").unwrap_or_default() == "1" {
             cfg.set_loopback();

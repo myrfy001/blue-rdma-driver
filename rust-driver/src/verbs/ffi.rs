@@ -4,6 +4,7 @@ use crate::{mem::sim_alloc, verbs::dev::PciHwDevice};
 
 use super::{
     ctx::{HwDeviceCtx, VerbsOps},
+    dev::EmulatedHwDevice,
     mock::MockDeviceCtx,
 };
 
