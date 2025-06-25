@@ -35,5 +35,5 @@ jobs:
 
     - name: Run tests
       working-directory: rust-driver
-      run: cargo nextest run
+      run: cargo nextest run --nocapture
 
