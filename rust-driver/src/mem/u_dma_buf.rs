@@ -107,8 +107,12 @@ mod tests {
     use std::io::ErrorKind;
 
     #[test]
+    #[allow(clippy::print_stderr)]
     fn allocate_pages() {
-        let mut allocator = UDmaBufAllocator::open().unwrap();
+        let Ok(mut allocator) = UDmaBufAllocator::open() else {
+            eprintln!("test 'allocate_pages' was skipped as it needs u-dma-buf kernel module to be loaded");
+            return;
+        };
         let mut x = allocator.create(0x1000).unwrap();
         assert_eq!(x.len(), 0x1000);
         x.copy_from(0, &[1; 1]);

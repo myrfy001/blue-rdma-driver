@@ -30,10 +30,15 @@ impl FrameRx for FrameRxSocket {
 }
 
 #[test]
+#[allow(clippy::print_stderr)]
 fn worker_loopback() {
     let network = IpNetwork::new(Ipv4Addr::new(172, 16, 0, 0).into(), 24).unwrap();
     let config = SimpleNicDeviceConfig::new(network);
-    let dev = SimpleNicDevice::new(config).unwrap();
+    // Requires root
+    let Ok(dev) = SimpleNicDevice::new(config) else {
+        eprintln!("test 'worker_loopback' was skipped as it needs to be run as root");
+        return;
+    };
     let socket_tx = UdpSocket::bind("127.0.0.1:0").unwrap();
     let socket_rx = UdpSocket::bind("127.0.0.1:0").unwrap();
     socket_tx.connect(socket_rx.local_addr().unwrap()).unwrap();

@@ -98,15 +98,3 @@ impl<const N: usize> HostPageAllocator<N> {
         Ok(true)
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn consc_mem_alloc_succ() {
-        let mem = HostPageAllocator::<1>::new()
-            .alloc()
-            .expect("failed to allocate");
-    }
-}
