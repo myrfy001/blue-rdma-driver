@@ -218,15 +218,13 @@ impl<H: HwDevice> HwDeviceCtx<H> {
     }
 
     fn rdma_read(&self, qpn: u32, wr: SendWrRdma) {
-        let (task, result_rx) = RdmaWriteTask::new_write(qpn, wr);
+        let task = RdmaWriteTask::new_write(qpn, wr);
         self.rdma_write_tx.send(task);
-        result_rx.recv().expect("failed to receive result");
     }
 
     fn rdma_write(&self, qpn: u32, wr: SendWrRdma) {
-        let (task, result_rx) = RdmaWriteTask::new_write(qpn, wr);
+        let task = RdmaWriteTask::new_write(qpn, wr);
         self.rdma_write_tx.send(task);
-        result_rx.recv().expect("failed to receive result");
     }
 }
 

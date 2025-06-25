@@ -252,3 +252,18 @@ pub(crate) fn build_meta_report_queue_proxies<Dev: Clone>(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_build_different_mode() {
+        assert_eq!(build_send_queue_proxies((), Mode::Mode400G).len(), 4);
+        assert_eq!(build_send_queue_proxies((), Mode::Mode200G).len(), 2);
+        assert_eq!(build_send_queue_proxies((), Mode::Mode100G).len(), 1);
+        assert_eq!(build_meta_report_queue_proxies((), Mode::Mode400G).len(), 4);
+        assert_eq!(build_meta_report_queue_proxies((), Mode::Mode200G).len(), 2);
+        assert_eq!(build_meta_report_queue_proxies((), Mode::Mode100G).len(), 1);
+    }
+}

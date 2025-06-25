@@ -170,3 +170,226 @@ impl<T: Copy> DmaRingBuf<T> {
 
 #[allow(unsafe_code)]
 unsafe impl<T> Send for DmaRingBuf<T> {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[allow(unsafe_code)]
+    fn create_test_mmap() -> MmapMut {
+        let len = 0x10000;
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                len,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED | libc::MAP_ANON,
+                -1,
+                0,
+            )
+        };
+
+        MmapMut { ptr, len }
+    }
+
+    #[test]
+    fn test_dma_ring_buf_push_pop() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(42));
+        assert_eq!(rb.len(), 1);
+        assert_eq!(rb.remaining(), RING_BUF_LEN - 1);
+        assert!(!rb.is_empty());
+        assert!(!rb.is_full());
+
+        let popped = rb.pop(|_| true);
+        assert_eq!(popped, Some(42));
+        assert_eq!(rb.len(), 0);
+        assert_eq!(rb.remaining(), RING_BUF_LEN);
+        assert!(rb.is_empty());
+        assert!(!rb.is_full());
+    }
+
+    #[test]
+    fn test_dma_ring_buf_conditional_pop() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(42));
+
+        let popped = rb.pop(|_| false);
+        assert_eq!(popped, None);
+        assert_eq!(rb.len(), 1);
+
+        let popped = rb.pop(|&x| x == 42);
+        assert_eq!(popped, Some(42));
+        assert_eq!(rb.len(), 0);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_fill_and_overflow() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        for i in 0..RING_BUF_LEN {
+            assert!(rb.push(i as u32));
+        }
+
+        assert_eq!(rb.len(), RING_BUF_LEN);
+        assert_eq!(rb.remaining(), 0);
+        assert!(!rb.is_empty());
+        assert!(rb.is_full());
+
+        assert!(!rb.push(9999));
+
+        for i in 0..RING_BUF_LEN {
+            let popped = rb.pop(|_| true);
+            assert_eq!(popped, Some(i as u32));
+        }
+
+        assert!(rb.is_empty());
+        assert!(!rb.is_full());
+    }
+
+    #[test]
+    fn test_dma_ring_buf_wraparound() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        for i in 0..RING_BUF_LEN / 2 {
+            assert!(rb.push(i as u32));
+        }
+
+        for i in 0..RING_BUF_LEN / 2 {
+            let popped = rb.pop(|_| true);
+            assert_eq!(popped, Some(i as u32));
+        }
+
+        for i in 0..RING_BUF_LEN {
+            assert!(rb.push((i + 1000) as u32));
+        }
+
+        assert!(rb.is_full());
+
+        for i in 0..RING_BUF_LEN {
+            let popped = rb.pop(|_| true);
+            assert_eq!(popped, Some((i + 1000) as u32));
+        }
+
+        assert!(rb.is_empty());
+    }
+
+    #[test]
+    fn test_dma_ring_buf_pop_two() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(1));
+        assert!(rb.push(2));
+
+        let (first, second) = rb.pop_two(|_| true, |&x| x == 1);
+        assert_eq!(first, Some(1));
+        assert_eq!(second, Some(2));
+        assert!(rb.is_empty());
+    }
+
+    #[test]
+    fn test_dma_ring_buf_pop_two_no_next_required() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(1));
+        assert!(rb.push(2));
+
+        let (first, second) = rb.pop_two(|_| true, |&x| x != 1);
+        assert_eq!(first, Some(1));
+        assert_eq!(second, None);
+        assert_eq!(rb.len(), 1);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_pop_two_first_invalid() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(1));
+        assert!(rb.push(2));
+
+        let (first, second) = rb.pop_two(|&x| x != 1, |_| true);
+        assert_eq!(first, None);
+        assert_eq!(second, None);
+        assert_eq!(rb.len(), 2);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_pop_two_second_invalid() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        assert!(rb.push(1));
+        assert!(rb.push(2));
+
+        let (first, second) = rb.pop_two(|&x| x == 1 || x == 3, |&x| x == 1);
+        assert_eq!(first, None);
+        assert_eq!(second, None);
+        assert_eq!(rb.len(), 2);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_set_head_tail() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        rb.set_head(100);
+        rb.set_tail(50);
+
+        assert_eq!(rb.head(), 100);
+        assert_eq!(rb.tail(), 50);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_indices() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        rb.set_head(RING_BUF_LEN as u32 + 5);
+        rb.set_tail(RING_BUF_LEN as u32 + 3);
+
+        assert_eq!(rb.head_idx(), 5);
+        assert_eq!(rb.tail_idx(), 3);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_len_calculation() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        rb.set_head(10);
+        rb.set_tail(5);
+        assert_eq!(rb.len(), 5);
+
+        rb.set_head(RING_BUF_LEN as u32 + 10);
+        rb.set_tail(5);
+        let expected_len = (RING_BUF_LEN + 10 - 5) & RING_BUF_LEN_WRAP_MASK;
+        assert_eq!(rb.len(), expected_len);
+    }
+
+    #[test]
+    fn test_dma_ring_buf_inc_operations() {
+        let mmap = create_test_mmap();
+        let mut rb = DmaRingBuf::<u32>::new(mmap);
+
+        let initial_head = rb.head();
+        rb.inc_head();
+        assert_eq!(rb.head(), (initial_head + 1) & RING_BUF_LEN_WRAP_MASK);
+
+        let initial_tail = rb.tail();
+        rb.inc_tail();
+        assert_eq!(rb.tail(), (initial_tail + 1) & RING_BUF_LEN_WRAP_MASK);
+
+        rb.set_head(RING_BUF_LEN_WRAP_MASK as u32);
+        rb.inc_head();
+        assert_eq!(rb.head(), 0);
+    }
+}

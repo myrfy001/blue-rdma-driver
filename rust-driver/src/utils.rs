@@ -140,13 +140,109 @@ impl Sub for Msn {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0.sub(rhs.0))
+        Self(self.0.wrapping_sub(rhs.0))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn psn_add_u32() {
+        let psn = Psn(100);
+        let result = psn + 50;
+        assert_eq!(result.0, 150);
+
+        let psn = Psn(PSN_MASK);
+        let result = psn + 1;
+        assert_eq!(result.0, 0);
+    }
+
+    #[test]
+    fn psn_add_psn() {
+        let psn1 = Psn(100);
+        let psn2 = Psn(50);
+        let result = psn1 + psn2;
+        assert_eq!(result.0, 150);
+
+        let psn1 = Psn(PSN_MASK);
+        let psn2 = Psn(1);
+        let result = psn1 + psn2;
+        assert_eq!(result.0, 0);
+    }
+
+    #[test]
+    fn psn_add_assign_u32() {
+        let mut psn = Psn(100);
+        psn += 50;
+        assert_eq!(psn.0, 150);
+
+        let mut psn = Psn(PSN_MASK);
+        psn += 1;
+        assert_eq!(psn.0, 0);
+    }
+
+    #[test]
+    fn psn_add_assign_psn() {
+        let mut psn1 = Psn(100);
+        let psn2 = Psn(50);
+        psn1 += psn2;
+        assert_eq!(psn1.0, 150);
+
+        let mut psn1 = Psn(PSN_MASK);
+        let psn2 = Psn(1);
+        psn1 += psn2;
+        assert_eq!(psn1.0, 0);
+    }
+
+    #[test]
+    fn psn_sub_u32() {
+        let psn = Psn(150);
+        let result = psn - 50;
+        assert_eq!(result.0, 100);
+
+        let psn = Psn(0);
+        let result = psn - 1;
+        assert_eq!(result.0, PSN_MASK);
+    }
+
+    #[test]
+    fn psn_sub_psn() {
+        let psn1 = Psn(150);
+        let psn2 = Psn(50);
+        let result = psn1 - psn2;
+        assert_eq!(result.0, 100);
+
+        let psn1 = Psn(0);
+        let psn2 = Psn(1);
+        let result = psn1 - psn2;
+        assert_eq!(result.0, PSN_MASK);
+    }
+
+    #[test]
+    fn psn_sub_assign_u32() {
+        let mut psn = Psn(150);
+        psn -= 50;
+        assert_eq!(psn.0, 100);
+
+        let mut psn = Psn(0);
+        psn -= 1;
+        assert_eq!(psn.0, PSN_MASK);
+    }
+
+    #[test]
+    fn psn_sub_assign_psn() {
+        let mut psn1 = Psn(150);
+        let psn2 = Psn(50);
+        psn1 -= psn2;
+        assert_eq!(psn1.0, 100);
+
+        let mut psn1 = Psn(0);
+        let psn2 = Psn(1);
+        psn1 -= psn2;
+        assert_eq!(psn1.0, PSN_MASK);
+    }
 
     #[test]
     fn psn_ordering() {
@@ -156,5 +252,61 @@ mod tests {
 
         assert_eq!(Psn(0).cmp(&Psn((1 << 24) - 1)), Ordering::Greater);
         assert_eq!(Psn((1 << 24) - 1).cmp(&Psn(0)), Ordering::Less);
+    }
+
+    #[test]
+    fn msn_distance() {
+        let msn1 = Msn(100);
+        let msn2 = Msn(50);
+        assert_eq!(msn1.distance(msn2), 50);
+
+        let msn1 = Msn(10);
+        let msn2 = Msn(0xFFFA);
+        assert_eq!(msn1.distance(msn2), 16);
+    }
+
+    #[test]
+    fn msn_advance() {
+        let msn = Msn(100);
+        let result = msn.advance(50);
+        assert_eq!(result.0, 150);
+
+        // Test wrapping
+        let msn = Msn(0xFFFF);
+        let result = msn.advance(1);
+        assert_eq!(result.0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid delta")]
+    fn msn_advance_panic() {
+        let msn = Msn(100);
+        msn.advance(usize::MAX);
+    }
+
+    #[test]
+    fn msn_ordering() {
+        let msn1 = Msn(100);
+        let msn2 = Msn(200);
+        assert_eq!(msn1.partial_cmp(&msn2), Some(Ordering::Less));
+        assert_eq!(msn2.partial_cmp(&msn1), Some(Ordering::Greater));
+        assert_eq!(msn1.partial_cmp(&msn1), Some(Ordering::Equal));
+
+        let msn1 = Msn(0);
+        let msn2 = Msn((MAX_SEND_WR + 1) as u16);
+        assert_eq!(msn1.partial_cmp(&msn2), Some(Ordering::Greater));
+    }
+
+    #[test]
+    fn msn_sub() {
+        let msn1 = Msn(150);
+        let msn2 = Msn(50);
+        let result = msn1 - msn2;
+        assert_eq!(result.0, 100);
+
+        let msn1 = Msn(10);
+        let msn2 = Msn(20);
+        let result = msn1 - msn2;
+        assert_eq!(result.0, 0xFFF6);
     }
 }

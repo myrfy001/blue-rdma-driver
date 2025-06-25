@@ -48,7 +48,7 @@ impl CompletionQueueRegistry {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 #[allow(variant_size_differences)]
 pub(crate) enum CompletionTask {
     Register { qpn: u32, event: Event },
@@ -332,14 +332,14 @@ trait EventMeta {
     fn meta(&self) -> MessageMeta;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Event {
     Send(SendEvent),
     Recv(RecvEvent),
     PostRecv(PostRecvEvent),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SendEvent {
     qpn: u32,
     op: SendEventOp,
@@ -365,19 +365,19 @@ impl EventMeta for SendEvent {
 }
 
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SendEventOp {
     WriteSignaled,
     SendSignaled,
     ReadSignaled,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct RecvEvent {
-    qpn: u32,
-    op: RecvEventOp,
-    meta: MessageMeta,
-    ack_req: bool,
+    pub(crate) qpn: u32,
+    pub(crate) op: RecvEventOp,
+    pub(crate) meta: MessageMeta,
+    pub(crate) ack_req: bool,
 }
 
 impl RecvEvent {
@@ -397,7 +397,7 @@ impl EventMeta for RecvEvent {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum RecvEventOp {
     Write,
     WriteWithImm { imm: u32 },
@@ -407,7 +407,7 @@ pub(crate) enum RecvEventOp {
     RecvRead,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PostRecvEvent {
     qpn: u32,
     wr_id: u64,
@@ -419,7 +419,7 @@ impl PostRecvEvent {
     }
 }
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct MessageMeta {
     pub(crate) msn: u16,
     pub(crate) end_psn: Psn,

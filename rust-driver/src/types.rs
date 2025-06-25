@@ -124,9 +124,9 @@ impl From<SendWrBase> for SendWr {
 }
 
 /// A resolver and validator for send work requests
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SendWrRdma {
-    base: SendWrBase,
+    pub(crate) base: SendWrBase,
     pub(crate) raddr: u64,
     pub(crate) rkey: u32,
 }
@@ -251,7 +251,7 @@ impl SendWrRdma {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SendWrBase {
     pub(crate) wr_id: u64,
     pub(crate) send_flags: u32,
@@ -301,7 +301,7 @@ impl SendWrBase {
 // ValidationError has been moved to the error module
 
 #[allow(clippy::unsafe_derive_deserialize)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
 pub(crate) struct RecvWr {
     pub(crate) wr_id: u64,
     pub(crate) addr: u64,

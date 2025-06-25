@@ -18,8 +18,8 @@ use crate::{
     utils::Psn,
     workers::{
         ack_responder::AckResponse,
-        qp_timeout::AckTimeoutTask,
         completion::{CompletionTask, Event, MessageMeta, RecvEvent, RecvEventOp},
+        qp_timeout::AckTimeoutTask,
         rdma::RdmaWriteTask,
         retransmit::PacketRetransmitTask,
         send::WorkReqOpCode,
@@ -236,7 +236,7 @@ impl MetaHandler {
             WorkReqOpCode::RdmaReadResp,
         );
         let send_wr = SendWrRdma::new_from_base(base, meta.laddr, meta.lkey);
-        let (task, _) = RdmaWriteTask::new_write(meta.dqpn, send_wr);
+        let task = RdmaWriteTask::new_write(meta.dqpn, send_wr);
         self.rdma_write_tx.send(task);
 
         Some(())
@@ -330,5 +330,311 @@ impl MetaHandler {
         }
 
         Some(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        psn_tracker::{LocalAckTracker, RemoteAckTracker},
+        workers::spawner::{task_channel, TaskRx},
+    };
+
+    use super::*;
+
+    #[allow(clippy::struct_field_names)]
+    struct Rxs {
+        ack_rx: TaskRx<AckResponse>,
+        ack_timeout_rx: TaskRx<AckTimeoutTask>,
+        packet_retransmit_rx: TaskRx<PacketRetransmitTask>,
+        completion_rx: TaskRx<CompletionTask>,
+        rdma_write_rx: TaskRx<RdmaWriteTask>,
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    impl Rxs {
+        fn assert_completion(&self, task: CompletionTask) {
+            let recv = self.completion_rx.recv().unwrap();
+            assert_eq!(task, recv);
+        }
+
+        fn assert_ack(&self, task: AckResponse) {
+            let recv = self.ack_rx.recv().unwrap();
+            assert_eq!(task, recv);
+        }
+
+        fn assert_ack_timeout(&self, task: AckTimeoutTask) {
+            let recv = self.ack_timeout_rx.recv().unwrap();
+            assert_eq!(task, recv);
+        }
+
+        fn assert_packet_retransmit(&self, task: PacketRetransmitTask) {
+            let recv = self.packet_retransmit_rx.recv().unwrap();
+            assert_eq!(task, recv);
+        }
+
+        fn assert_rdma_write(&self, task: RdmaWriteTask) {
+            let recv = self.rdma_write_rx.recv().unwrap();
+            assert_eq!(task, recv);
+        }
+    }
+
+    fn init_handler() -> (MetaHandler, Rxs) {
+        let (ack_tx, ack_rx) = task_channel();
+        let (ack_timeout_tx, ack_timeout_rx) = task_channel();
+        let (packet_retransmit_tx, packet_retransmit_rx) = task_channel();
+        let (completion_tx, completion_rx) = task_channel();
+        let (rdma_write_tx, rdma_write_rx) = task_channel();
+        let handler = MetaHandler::new(
+            ack_tx,
+            ack_timeout_tx,
+            packet_retransmit_tx,
+            completion_tx,
+            rdma_write_tx,
+        );
+        let rxs = Rxs {
+            ack_rx,
+            ack_timeout_rx,
+            packet_retransmit_rx,
+            completion_rx,
+            rdma_write_rx,
+        };
+        (handler, rxs)
+    }
+
+    #[test]
+    fn test_handle_ack_local_hw() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 123;
+        let meta = AckMetaLocalHw {
+            qpn,
+            psn_now: Psn(0),
+            now_bitmap: u128::MAX,
+        };
+        handler.handle_meta(ReportMeta::AckLocalHw(meta)).unwrap();
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+        rxs.assert_completion(CompletionTask::AckRecv {
+            qpn,
+            base_psn: Psn(128),
+        });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::Ack { qpn, psn: Psn(128) });
+    }
+
+    #[test]
+    fn test_handle_ack_remote_driver() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 456;
+
+        // Initialize tracker for the QP
+        handler.send_table.get_qp_mut(qpn).unwrap();
+
+        let meta = AckMetaRemoteDriver {
+            qpn,
+            psn_now: Psn(200),
+        };
+        handler
+            .handle_meta(ReportMeta::AckRemoteDriver(meta))
+            .unwrap();
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+        rxs.assert_completion(CompletionTask::AckSend {
+            qpn,
+            base_psn: Psn(200),
+        });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::Ack { qpn, psn: Psn(200) });
+    }
+
+    #[test]
+    fn test_handle_nak_local_hw() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 789;
+
+        let meta = NakMetaLocalHw {
+            qpn,
+            msn: 10,
+            psn_now: Psn(128),
+            now_bitmap: 1,
+            psn_pre: Psn(0),
+            pre_bitmap: u128::MAX - 2,
+        };
+        handler.handle_meta(ReportMeta::NakLocalHw(meta)).unwrap();
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+        rxs.assert_completion(CompletionTask::AckRecv {
+            qpn,
+            base_psn: Psn(1),
+        });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::Ack { qpn, psn: Psn(1) });
+    }
+
+    #[test]
+    fn test_handle_nak_remote_hw() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 101;
+        let meta = NakMetaRemoteHw {
+            qpn,
+            msn: 15,
+            psn_now: Psn(128),
+            now_bitmap: 1,
+            psn_pre: Psn(0),
+            pre_bitmap: u128::MAX - 2,
+        };
+
+        handler.handle_meta(ReportMeta::NakRemoteHw(meta)).unwrap();
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+        rxs.assert_completion(CompletionTask::AckSend {
+            qpn,
+            base_psn: Psn(1),
+        });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::Ack { qpn, psn: Psn(1) });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::RetransmitRange {
+            qpn,
+            psn_low: Psn(0),
+            psn_high: Psn(256),
+        });
+    }
+
+    #[test]
+    fn test_handle_nak_remote_driver() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 202;
+
+        let meta = NakMetaRemoteDriver {
+            qpn,
+            psn_now: Psn(500),
+            psn_pre: Psn(450),
+        };
+
+        let result = handler.handle_meta(ReportMeta::NakRemoteDriver(meta));
+        assert!(result.is_some());
+
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+        rxs.assert_completion(CompletionTask::AckSend {
+            qpn,
+            base_psn: Psn(450),
+        });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::Ack { qpn, psn: Psn(450) });
+        rxs.assert_packet_retransmit(PacketRetransmitTask::RetransmitRange {
+            qpn,
+            psn_low: Psn(450),
+            psn_high: Psn(500),
+        });
+    }
+
+    #[test]
+    fn test_handle_header_read() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 303;
+
+        let meta = HeaderReadMeta {
+            msn: 20,
+            psn: Psn(600),
+            dqpn: qpn,
+            raddr: 0x1000,
+            rkey: 0x2000,
+            total_len: 1024,
+            laddr: 0x3000,
+            lkey: 0x4000,
+            ack_req: true,
+        };
+
+        handler.handle_meta(ReportMeta::HeaderRead(meta)).unwrap();
+        rxs.assert_completion(CompletionTask::Register {
+            qpn,
+            event: Event::Recv(RecvEvent::new(
+                qpn,
+                RecvEventOp::RecvRead,
+                MessageMeta::new(20, Psn(601)),
+                true,
+            )),
+        });
+        let base = SendWrBase::new(
+            0,
+            ibverbs_sys::ibv_send_flags::IBV_SEND_SOLICITED.0,
+            0x1000,
+            1024,
+            0x2000,
+            0,
+            WorkReqOpCode::RdmaReadResp,
+        );
+        let send_wr = SendWrRdma::new_from_base(base, meta.laddr, meta.lkey);
+        let task = RdmaWriteTask::new_write(meta.dqpn, send_wr);
+        rxs.assert_rdma_write(task);
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+    }
+
+    #[test]
+    fn test_handle_header_write_last_packet() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 505;
+
+        let meta = HeaderWriteMeta {
+            pos: PacketPos::Only,
+            msn: 30,
+            psn: Psn(0),
+            solicited: false,
+            ack_req: true,
+            is_retry: false,
+            dqpn: qpn,
+            total_len: 4096,
+            raddr: 0x9000,
+            rkey: 0xA000,
+            imm: 0,
+            header_type: HeaderType::Write,
+        };
+
+        handler.handle_meta(ReportMeta::HeaderWrite(meta)).unwrap();
+        let event = Event::Recv(RecvEvent::new(
+            meta.dqpn,
+            RecvEventOp::Write,
+            MessageMeta::new(30, Psn(1)),
+            true,
+        ));
+        rxs.assert_completion(CompletionTask::Register { qpn, event });
+        rxs.assert_completion(CompletionTask::AckRecv {
+            qpn,
+            base_psn: Psn(1),
+        });
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+    }
+
+    #[test]
+    fn test_handle_header_write_middle_packet() {
+        let (mut handler, rxs) = init_handler();
+        let qpn = 505;
+
+        let meta = HeaderWriteMeta {
+            pos: PacketPos::Middle,
+            msn: 30,
+            psn: Psn(1),
+            solicited: false,
+            ack_req: true,
+            is_retry: false,
+            dqpn: qpn,
+            total_len: 4096,
+            raddr: 0x9000,
+            rkey: 0xA000,
+            imm: 0,
+            header_type: HeaderType::Write,
+        };
+
+        handler.handle_meta(ReportMeta::HeaderWrite(meta)).unwrap();
+
+        // Should not send completion task for middle packet
+        assert!(rxs.completion_rx.try_recv().is_none());
+
+        rxs.assert_ack_timeout(AckTimeoutTask::RecvMeta { qpn });
+    }
+
+    #[test]
+    fn test_handle_meta_invalid_qpn() {
+        let (mut handler, _rxs) = init_handler();
+
+        let meta = ReportMeta::AckLocalHw(AckMetaLocalHw {
+            qpn: 999_999, // Invalid QPN
+            psn_now: Psn(100),
+            now_bitmap: 0xFF,
+        });
+
+        let result = handler.handle_meta(meta);
+        assert!(result.is_none());
     }
 }

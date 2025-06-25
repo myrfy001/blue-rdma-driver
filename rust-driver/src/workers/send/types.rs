@@ -243,7 +243,7 @@ impl ChunkPos {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct QpParams {
     pub(crate) msn: u16,
     pub(crate) qp_type: u8,

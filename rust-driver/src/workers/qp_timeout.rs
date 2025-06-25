@@ -49,7 +49,7 @@ impl AckTimeoutConfig {
 }
 
 #[allow(variant_size_differences)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum AckTimeoutTask {
     // A new message with the AckReq bit set
     NewAckReq {
@@ -129,7 +129,7 @@ impl TransportTimer {
             return TimerResult::RetryLimitExceeded;
         }
         self.current_retry_counter -= 1;
-        self.restart();
+        self.reset();
         TimerResult::Timeout
     }
 
@@ -143,6 +143,10 @@ impl TransportTimer {
 
     fn restart(&mut self) {
         self.current_retry_counter = self.init_retry_counter;
+        self.last_start = Some(Instant::now());
+    }
+
+    fn reset(&mut self) {
         self.last_start = Some(Instant::now());
     }
 }
@@ -224,5 +228,263 @@ impl QpAckTimeoutWorker {
             config,
             outstanding_ack_req_cnt: QpTable::new(),
         }
+    }
+}
+
+#[allow(clippy::unchecked_duration_subtraction)]
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::workers::spawner::task_channel;
+    use std::time::Duration;
+
+    #[test]
+    fn test_transport_timer_disabled() {
+        let mut timer = TransportTimer::new(0, 3); // timeout disabled
+        assert!(!timer.is_running());
+
+        timer.restart();
+        assert!(timer.is_running());
+
+        // Should always return Ok when disabled
+        assert!(matches!(timer.check_timeout(), TimerResult::Ok));
+    }
+
+    #[test]
+    fn test_transport_timer_not_started() {
+        let mut timer = TransportTimer::new(1, 3);
+        assert!(!timer.is_running());
+
+        // Should return Ok when not started
+        assert!(matches!(timer.check_timeout(), TimerResult::Ok));
+    }
+
+    #[test]
+    fn test_transport_timer_basic_operations() {
+        let mut timer = TransportTimer::new(1, 3);
+
+        // Start timer
+        timer.restart();
+        assert!(timer.is_running());
+
+        // Should not timeout immediately
+        assert!(matches!(timer.check_timeout(), TimerResult::Ok));
+
+        // Stop timer
+        timer.stop();
+        assert!(!timer.is_running());
+
+        // Should return Ok when stopped
+        assert!(matches!(timer.check_timeout(), TimerResult::Ok));
+    }
+
+    #[test]
+    fn test_transport_timer_timeout_calculation() {
+        // Test timeout calculation: 4.096 uS * 2^1 = 8.192 uS
+        let timer = TransportTimer::new(1, 3);
+        let expected_nanos = 4096u64 << 1;
+        assert_eq!(
+            timer.timeout_interval,
+            Some(Duration::from_nanos(expected_nanos))
+        );
+
+        // Test with larger exponent
+        let timer = TransportTimer::new(5, 3);
+        let expected_nanos = 4096u64 << 5;
+        assert_eq!(
+            timer.timeout_interval,
+            Some(Duration::from_nanos(expected_nanos))
+        );
+    }
+
+    #[test]
+    fn test_transport_timer_retry_logic() {
+        let mut timer = TransportTimer::new(1, 2); // 2 retries
+        timer.restart();
+
+        // Simulate timeout by setting start time in the past
+        timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+
+        // First timeout should return Timeout and decrement counter
+        assert!(matches!(timer.check_timeout(), TimerResult::Timeout));
+
+        // Second timeout should return Timeout and decrement counter
+        timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+        assert!(matches!(timer.check_timeout(), TimerResult::Timeout));
+
+        // Third timeout should return RetryLimitExceeded
+        timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+        assert!(matches!(
+            timer.check_timeout(),
+            TimerResult::RetryLimitExceeded
+        ));
+    }
+
+    #[test]
+    fn test_qp_ack_timeout_worker_new_ack_req() {
+        let (tx, rx) = task_channel();
+        let config = AckTimeoutConfig::default();
+        let mut worker = QpAckTimeoutWorker::new(tx, config);
+
+        let qpn = 42;
+        let task = AckTimeoutTask::new_ack_req(qpn);
+
+        // Process new ack req task
+        worker.process(task);
+
+        // Verify outstanding count increased
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+
+        // Verify timer is running
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(is_running);
+    }
+
+    #[test]
+    fn test_qp_ack_timeout_worker_recv_meta() {
+        let (tx, rx) = task_channel();
+        let config = AckTimeoutConfig::default();
+        let mut worker = QpAckTimeoutWorker::new(tx, config);
+
+        let qpn = 42;
+        let task = AckTimeoutTask::recv_meta(qpn);
+
+        // Process recv meta task
+        worker.process(task);
+
+        // Verify timer is running (restarted)
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(is_running);
+    }
+
+    #[test]
+    fn test_qp_ack_timeout_worker_ack_single() {
+        let (tx, rx) = task_channel();
+        let config = AckTimeoutConfig::default();
+        let mut worker = QpAckTimeoutWorker::new(tx, config);
+
+        let qpn = 42;
+
+        // First add an ack req
+        worker.process(AckTimeoutTask::new_ack_req(qpn));
+
+        // Verify timer is running and count is 1
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(is_running);
+
+        // Process ack task
+        worker.process(AckTimeoutTask::ack(qpn));
+
+        // Verify count decreased and timer stopped
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(!is_running);
+    }
+
+    #[test]
+    fn test_qp_ack_timeout_worker_ack_multiple() {
+        let (tx, rx) = task_channel();
+        let config = AckTimeoutConfig::default();
+        let mut worker = QpAckTimeoutWorker::new(tx, config);
+
+        let qpn = 42;
+
+        // Add multiple ack reqs
+        worker.process(AckTimeoutTask::new_ack_req(qpn));
+        worker.process(AckTimeoutTask::new_ack_req(qpn));
+
+        // Verify count is 2 and timer is running
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 2);
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(is_running);
+
+        // Process one ack
+        worker.process(AckTimeoutTask::ack(qpn));
+
+        // Verify count decreased but timer still running
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 1);
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(is_running);
+
+        // Process second ack
+        worker.process(AckTimeoutTask::ack(qpn));
+
+        // Verify count is 0 and timer stopped
+        let count = worker
+            .outstanding_ack_req_cnt
+            .map_qp_mut(qpn, |x| *x)
+            .unwrap_or(0);
+        assert_eq!(count, 0);
+        let is_running = worker
+            .timer_table
+            .map_qp_mut(qpn, |timer| timer.is_running())
+            .unwrap_or(false);
+        assert!(!is_running);
+    }
+
+    #[test]
+    fn test_transport_timer_restart_resets_retry_counter() {
+        let mut timer = TransportTimer::new(1, 3);
+        timer.restart();
+
+        // Simulate timeout to decrement retry counter
+        timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+        timer.check_timeout(); // This should decrement counter and restart
+
+        // Restart should reset the counter
+        timer.restart();
+
+        // Verify we can timeout the full number of times again
+        for _ in 0..3 {
+            timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+            let result = timer.check_timeout();
+            assert!(matches!(result, TimerResult::Timeout));
+        }
+
+        // Next timeout should exceed retry limit
+        timer.last_start = Some(Instant::now() - Duration::from_millis(100));
+        assert!(matches!(
+            timer.check_timeout(),
+            TimerResult::RetryLimitExceeded
+        ));
     }
 }

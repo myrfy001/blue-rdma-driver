@@ -134,8 +134,12 @@ pub(crate) struct TaskRx<T> {
 }
 
 impl<T> TaskRx<T> {
-    fn recv(&self) -> Option<T> {
+    pub(crate) fn recv(&self) -> Option<T> {
         self.inner.recv().ok()
+    }
+
+    pub(crate) fn try_recv(&self) -> Option<T> {
+        self.inner.try_recv().ok()
     }
 
     fn try_iter(&self) -> flume::TryIter<'_, T> {

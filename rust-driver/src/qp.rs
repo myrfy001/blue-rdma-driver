@@ -54,10 +54,10 @@ impl QpManager {
 
 #[derive(Default, Debug)]
 pub(crate) struct SendQueueContext {
-    msn: u16,
-    psn: Psn,
-    psn_acked: Psn,
-    msn_acked: u16,
+    pub(crate) msn: u16,
+    pub(crate) psn: Psn,
+    pub(crate) psn_acked: Psn,
+    pub(crate) msn_acked: u16,
 }
 
 impl SendQueueContext {

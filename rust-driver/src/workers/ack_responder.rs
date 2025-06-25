@@ -21,7 +21,7 @@ use crate::{
     workers::spawner::SingleThreadTaskWorker,
 };
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum AckResponse {
     Ack {
         qpn: u32,
@@ -217,4 +217,77 @@ pub(crate) struct Bth {
     solicited: bool,
     opcode: u5,
     trans_type: u3,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    struct Tx(flume::Sender<Vec<u8>>);
+
+    impl FrameTx for Tx {
+        fn send(&mut self, buf: &[u8]) -> std::io::Result<()> {
+            self.0.send(buf.to_vec()).unwrap();
+            Ok(())
+        }
+    }
+    const TRANS_TYPE_RC: u8 = 0x00;
+    const OPCODE_ACKNOWLEDGE: u8 = 0x11;
+
+    #[test]
+    fn test_ack_response() {
+        let (tx, rx) = flume::unbounded();
+        let frame_tx = Tx(tx);
+        let qp_table = QpTableShared::default();
+        let qpn = 11;
+        qp_table
+            .map_qp_mut(qpn, |attr: &mut QpAttr| attr.dqpn = 13)
+            .unwrap();
+        let mut responder = AckResponder::new(qp_table.clone(), Box::new(frame_tx));
+        responder.process(AckResponse::Ack {
+            qpn: 11,
+            msn: 20,
+            last_psn: Psn(101),
+        });
+        let frame = rx.recv().unwrap();
+        assert_eq!(frame.len(), 90);
+        let mut bth = Bth::default();
+        bth.set_opcode(u5::from_u8(OPCODE_ACKNOWLEDGE));
+        bth.set_psn(u24::from_u32(101));
+        bth.set_dqpn(u24::from_u32(13));
+        bth.set_trans_type(u3::from_u8(TRANS_TYPE_RC));
+        assert_eq!(bth.value.to_be_bytes(), frame[42..54]);
+    }
+
+    #[test]
+    fn test_nak_response() {
+        let (tx, rx) = flume::unbounded();
+        let frame_tx = Tx(tx);
+        let qp_table = QpTableShared::default();
+        let qpn = 11;
+        qp_table
+            .map_qp_mut(qpn, |attr: &mut QpAttr| attr.dqpn = 13)
+            .unwrap();
+        let mut responder = AckResponder::new(qp_table.clone(), Box::new(frame_tx));
+        responder.process(AckResponse::Nak {
+            qpn: 11,
+            base_psn: Psn(71),
+            ack_req_packet_psn: Psn(101),
+        });
+        let frame = rx.recv().unwrap();
+        assert_eq!(frame.len(), 90);
+        let mut bth = Bth::default();
+        bth.set_opcode(u5::from_u8(OPCODE_ACKNOWLEDGE));
+        bth.set_psn(u24::from_u32(102));
+        bth.set_dqpn(u24::from_u32(13));
+        bth.set_trans_type(u3::from_u8(TRANS_TYPE_RC));
+        assert_eq!(bth.value.to_be_bytes(), frame[42..54]);
+
+        let mut aeth_seg0 = AethSeg0::default();
+        aeth_seg0.set_is_send_by_driver(true);
+        aeth_seg0.set_is_packet_loss(true);
+        aeth_seg0.set_is_window_slided(true);
+        aeth_seg0.set_pre_psn(u24::from_u32(71));
+        assert_eq!(aeth_seg0.value.to_be_bytes(), frame[86..90]);
+    }
 }
