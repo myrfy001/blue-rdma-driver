@@ -267,7 +267,7 @@ int main(int argc, char *argv[]) {
     run_server(msg_len);
   } else if (argc == 3) {
     int msg_len = atoi(argv[1]);
-    run_client(msg_len, argv[1]);
+    run_client(msg_len, argv[2]);
   } else {
     fprintf(stderr, "Usage: %s <msg_len> [server_ip]\n", argv[0]);
     fprintf(stderr, "  Run without arguments to start as server\n");
