@@ -316,6 +316,12 @@ where
     }
 
     fn update_qp(&mut self, qpn: u32, attr: IbvQpAttr) -> Result<()> {
+        // TODO: This is a workaround for read-to-write conversion. Consider modifying the
+        // hardware to allow remote writes for read responses.
+        let rq_access_flags = (ibverbs_sys::ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0
+            | ibverbs_sys::ibv_access_flags::IBV_ACCESS_REMOTE_READ.0
+            | ibverbs_sys::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE.0)
+            as u8;
         let entry = self
             .qp_attr_table
             .map_qp_mut(qpn, |current| {
@@ -329,13 +335,11 @@ where
                     peer_mac_addr: CARD_MAC_ADDRESS,
                     qp_type: current.qp_type,
                     peer_qpn: attr.dest_qp_num().unwrap_or(current.dqpn),
-                    rq_access_flags: attr
-                        .qp_access_flags()
-                        .map_or(current.access_flags, |x| x as u8),
+                    rq_access_flags,
                     pmtu: attr.path_mtu().map_or(current.pmtu, |x| x as u8),
                 };
                 current.dqpn = entry.peer_qpn;
-                current.access_flags = entry.rq_access_flags;
+                current.access_flags = rq_access_flags;
                 current.pmtu = entry.pmtu;
                 current.dqp_ip = ip_addr;
                 entry
