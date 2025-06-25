@@ -110,7 +110,7 @@ mod tests {
     #[allow(clippy::print_stderr)]
     fn allocate_pages() {
         let Ok(mut allocator) = UDmaBufAllocator::open() else {
-            eprintln!("test 'allocate_pages' was skipped as it needs u-dma-buf kernel module to be loaded");
+            eprintln!("WARN: test 'allocate_pages' was skipped as it needs u-dma-buf kernel module to be loaded");
             return;
         };
         let mut x = allocator.create(0x1000).unwrap();

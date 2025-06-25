@@ -36,7 +36,7 @@ fn worker_loopback() {
     let config = SimpleNicDeviceConfig::new(network);
     // Requires root
     let Ok(dev) = SimpleNicDevice::new(config) else {
-        eprintln!("test 'worker_loopback' was skipped as it needs to be run as root");
+        eprintln!("WARN: test 'worker_loopback' was skipped as it needs to be run as root");
         return;
     };
     let socket_tx = UdpSocket::bind("127.0.0.1:0").unwrap();
