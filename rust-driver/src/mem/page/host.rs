@@ -4,6 +4,7 @@ use std::ops::{Deref, DerefMut};
 
 use std::arch::x86_64::{_mm_clflush, _mm_mfence};
 
+use crate::constants::PAGE_SIZE_2MB;
 use crate::mem::{PAGE_SIZE, PAGE_SIZE_BITS};
 
 use super::{ContiguousPages, MmapMut, PageAllocator};
@@ -45,8 +46,7 @@ impl<const N: usize> HostPageAllocator<N> {
     /// Reserves memory pages using mmap.
     fn reserve(num_pages: usize) -> io::Result<MmapMut> {
         /// Number of bits representing a 4K page size
-        const PAGE_SIZE_2M: usize = 1 << 21;
-        let len = PAGE_SIZE_2M
+        let len = PAGE_SIZE_2MB
             .checked_mul(num_pages)
             .ok_or(io::Error::from(io::ErrorKind::Unsupported))?;
         #[cfg(feature = "page_size_2m")]

@@ -6,12 +6,12 @@ use std::{
     ptr,
 };
 
+use crate::constants::U_DMA_BUF_CLASS_PATH;
+
 use super::{
     page::{ContiguousPages, MmapMut, PageAllocator},
     DmaBuf, DmaBufAllocator, PageWithPhysAddr,
 };
-
-const CLASS_PATH: &str = "/sys/class/u-dma-buf/udmabuf0";
 
 pub(crate) struct UDmaBufAllocator {
     fd: File,
@@ -49,7 +49,7 @@ impl UDmaBufAllocator {
     }
 
     fn read_attribute(attr: &str) -> io::Result<String> {
-        let path = PathBuf::from(CLASS_PATH).join(attr);
+        let path = PathBuf::from(U_DMA_BUF_CLASS_PATH).join(attr);
         let mut content = String::new();
         let _ignore = File::open(&path)?.read_to_string(&mut content)?;
         Ok(content.trim().to_owned())

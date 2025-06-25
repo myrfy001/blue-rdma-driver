@@ -4,15 +4,10 @@ use bitvec::{array::BitArray, bitarr};
 use rand::Rng;
 
 use crate::{
+    constants::{LR_KEY_KEY_PART_WIDTH, MAX_MR_CNT, PGT_LEN},
     mem::{get_num_page, page::ContiguousPages, virt_to_phy::AddressResolver, PAGE_SIZE},
     RdmaError,
 };
-
-const MAX_MR_CNT: usize = 8192;
-const LR_KEY_KEY_PART_WIDTH: u32 = 8;
-const LR_KEY_IDX_PART_WIDTH: u32 = 32 - LR_KEY_KEY_PART_WIDTH;
-/// Maximum number of entries in the secodn stage table
-pub(super) const PGT_LEN: usize = 0x20000;
 
 /// Memory Translation Table implementation
 pub(crate) struct Mtt {

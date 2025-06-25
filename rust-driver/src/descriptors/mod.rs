@@ -20,8 +20,8 @@ pub(crate) use simple_nic::*;
 
 use bilge::prelude::*;
 
-use crate::ringbuf_desc::{DescDeserialize, DescSerialize};
-use crate::send::WorkReqOpCode;
+use crate::ringbuf::{DescDeserialize, DescSerialize};
+use crate::workers::send::WorkReqOpCode;
 
 /// Size of a descriptor in bytes.
 pub(crate) const DESC_SIZE: usize = 32;

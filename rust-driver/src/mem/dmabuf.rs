@@ -5,13 +5,13 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 
+use crate::constants::PAGE_SIZE_2MB;
+
 use super::page::{ContiguousPages, MmapMut, PageAllocator};
 
 const UDMABUF_IOCTL_TYPE: u8 = b'u';
 const UDMABUF_CREATE_NR: u8 = 0x42;
 const UDMABUF_FLAGS_CLOEXEC: u32 = 0x01;
-
-const PAGE_SIZE_2MB: usize = 1 << 21;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

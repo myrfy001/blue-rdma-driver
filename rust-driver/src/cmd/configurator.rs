@@ -15,14 +15,14 @@ use crate::{
         CmdQueueReqDescQpManagement, CmdQueueReqDescSetNetworkParam,
         CmdQueueReqDescSetRawPacketReceiveMeta,
     },
-    device::{
+    csr::{
         proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
         CsrBaseAddrAdaptor, CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
     },
     mem::{page::ContiguousPages, DmaBuf, PageWithPhysAddr},
     mtt::Mtt,
     net::config::NetworkConfig,
-    ringbuf_desc::DescRingBuffer,
+    ringbuf::DescRingBuffer,
 };
 
 use super::{

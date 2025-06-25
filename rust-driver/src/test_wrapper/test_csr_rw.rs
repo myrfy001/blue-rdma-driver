@@ -5,13 +5,11 @@ use ipnetwork::Ipv4Network;
 use crate::{
     mem::{sim_alloc, DmaBufAllocator, PageWithPhysAddr},
     net::config::{MacAddress, NetworkConfig},
-    ringbuf_desc::DescRingBufAllocator,
+    ringbuf::DescRingBufAllocator,
+    verbs::dev::{EmulatedHwDevice, HwDevice, PciHwDevice},
 };
 
-use crate::{
-    cmd::CommandConfigurator,
-    device::{ffi::EmulatedHwDevice, hardware::PciHwDevice, ops::HwDevice, DeviceAdaptor},
-};
+use crate::{cmd::CommandConfigurator, csr::DeviceAdaptor};
 static HEAP_ALLOCATOR: sim_alloc::Simalloc = sim_alloc::Simalloc::new();
 
 /// Device for testing

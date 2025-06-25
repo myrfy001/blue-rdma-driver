@@ -1,5 +1,5 @@
 use crate::descriptors::MetaReportQueueDescBthReth;
-use crate::ringbuf_desc::DescDeserialize;
+use crate::ringbuf::DescDeserialize;
 
 pub struct MetaReportQueueDescBthRethWrapper(MetaReportQueueDescBthReth);
 

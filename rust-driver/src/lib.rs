@@ -13,7 +13,7 @@
     missing_abi,
     missing_copy_implementations,
     missing_debug_implementations,
-    missing_docs,
+    // missing_docs,
     // must_not_suspend, unstable
     non_ascii_idents,
     // non_exhaustive_omitted_patterns, unstable
@@ -164,42 +164,32 @@
 #![allow(clippy::as_conversions, clippy::cast_possible_truncation)]
 #![allow(clippy::arithmetic_side_effects)]
 
-mod ack_responder;
-mod ack_timeout;
-mod ack_tracker;
 mod cmd;
-mod completion;
 mod config;
 /// Constants used throughout the driver
 mod constants;
+mod csr;
 mod descriptors;
-mod device;
 /// Error types and handling
 mod error;
 mod fragmenter;
 /// Memory operation components
 #[allow(unsafe_code)]
 mod mem;
-mod meta_report;
 /// Memory translation table
 mod mtt;
 #[allow(unused)]
 /// Network implementations
 pub mod net;
 mod pd;
+mod psn_tracker;
 mod qp;
-mod rdma_worker;
-mod recv;
-mod retransmit;
 mod ringbuf;
-mod ringbuf_desc;
-mod send;
-mod simple_nic;
-mod spawner;
 mod types;
 mod utils;
+mod verbs;
+mod workers;
 
-pub use device::ffi::{BlueRdmaCore, RdmaCtxOps};
 pub use error::{RdmaError, Result};
-pub use simple_nic::SimpleNicDeviceConfig;
+pub use verbs::{core::BlueRdmaCore, ffi::RdmaCtxOps};
 pub mod test_wrapper;

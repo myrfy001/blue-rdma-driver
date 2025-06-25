@@ -8,7 +8,7 @@ use ibverbs_sys::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{send::WorkReqOpCode, RdmaError};
+use crate::{workers::send::WorkReqOpCode, RdmaError};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum SendWr {
@@ -343,6 +343,277 @@ impl RecvWr {
             addr: u64::from_be_bytes(bytes[8..16].try_into().unwrap()),
             length: u32::from_be_bytes(bytes[16..20].try_into().unwrap()),
             lkey: u32::from_be_bytes(bytes[20..24].try_into().unwrap()),
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+pub(crate) struct QpAttr {
+    pub(crate) qp_type: u8,
+    pub(crate) qpn: u32,
+    pub(crate) dqpn: u32,
+    pub(crate) ip: u32,
+    pub(crate) dqp_ip: u32,
+    pub(crate) mac_addr: u64,
+    pub(crate) pmtu: u8,
+    pub(crate) access_flags: u8,
+    pub(crate) send_cq: Option<u32>,
+    pub(crate) recv_cq: Option<u32>,
+}
+
+impl QpAttr {
+    pub(crate) fn new_with_ip(ip: u32) -> Self {
+        Self {
+            ip,
+            ..Default::default()
+        }
+    }
+}
+
+#[allow(unsafe_code, clippy::wildcard_imports)]
+pub(crate) mod ibv_qp_attr {
+    use std::net::Ipv4Addr;
+
+    use ibverbs_sys::*;
+    use log::info;
+
+    pub(crate) struct IbvQpInitAttr {
+        pub(crate) qp_type: u8,
+        pub(crate) send_cq: Option<u32>,
+        pub(crate) recv_cq: Option<u32>,
+    }
+
+    impl IbvQpInitAttr {
+        pub(crate) fn new(attr: ibv_qp_init_attr) -> Self {
+            let send_cq = unsafe { attr.send_cq.as_ref() }.map(|cq| cq.handle);
+            let recv_cq = unsafe { attr.recv_cq.as_ref() }.map(|cq| cq.handle);
+            Self {
+                qp_type: attr.qp_type as u8,
+                send_cq,
+                recv_cq,
+            }
+        }
+
+        pub(crate) fn new_rc() -> Self {
+            Self {
+                qp_type: ibv_qp_type::IBV_QPT_RC as u8,
+                send_cq: None,
+                recv_cq: None,
+            }
+        }
+
+        pub(crate) fn qp_type(&self) -> u8 {
+            self.qp_type
+        }
+
+        pub(crate) fn send_cq(&self) -> Option<u32> {
+            self.send_cq
+        }
+
+        pub(crate) fn recv_cq(&self) -> Option<u32> {
+            self.recv_cq
+        }
+    }
+
+    #[derive(Default, Copy, Clone)]
+    pub(crate) struct IbvQpAttr {
+        pub(crate) qp_state: Option<ibv_qp_state::Type>,
+        pub(crate) cur_qp_state: Option<ibv_qp_state::Type>,
+        pub(crate) path_mtu: Option<ibv_mtu>,
+        pub(crate) path_mig_state: Option<ibv_mig_state>,
+        pub(crate) qkey: Option<u32>,
+        pub(crate) rq_psn: Option<u32>,
+        pub(crate) sq_psn: Option<u32>,
+        pub(crate) dest_qp_num: Option<u32>,
+        pub(crate) qp_access_flags: Option<::std::os::raw::c_uint>,
+        pub(crate) cap: Option<ibv_qp_cap>,
+        pub(crate) ah_attr: Option<ibv_ah_attr>,
+        pub(crate) alt_ah_attr: Option<ibv_ah_attr>,
+        pub(crate) pkey_index: Option<u16>,
+        pub(crate) alt_pkey_index: Option<u16>,
+        pub(crate) en_sqd_async_notify: Option<u8>,
+        pub(crate) max_rd_atomic: Option<u8>,
+        pub(crate) max_dest_rd_atomic: Option<u8>,
+        pub(crate) min_rnr_timer: Option<u8>,
+        pub(crate) port_num: Option<u8>,
+        pub(crate) timeout: Option<u8>,
+        pub(crate) retry_cnt: Option<u8>,
+        pub(crate) rnr_retry: Option<u8>,
+        pub(crate) alt_port_num: Option<u8>,
+        pub(crate) alt_timeout: Option<u8>,
+        pub(crate) rate_limit: Option<u32>,
+        pub(crate) dest_qp_ip: Option<Ipv4Addr>,
+    }
+
+    impl IbvQpAttr {
+        pub(crate) fn new(attr: ibv_qp_attr, attr_mask: u32) -> Self {
+            let dest_qp_ip = if attr_mask & ibv_qp_attr_mask::IBV_QP_AV.0 != 0 {
+                let gid = unsafe { attr.ah_attr.grh.dgid.raw };
+                info!("gid: {:x}", u128::from_be_bytes(gid));
+
+                // Format: ::ffff:a.b.c.d
+                let is_ipv4_mapped =
+                    gid[..10].iter().all(|&x| x == 0) && gid[10] == 0xFF && gid[11] == 0xFF;
+
+                is_ipv4_mapped.then(|| Ipv4Addr::new(gid[12], gid[13], gid[14], gid[15]))
+            } else {
+                None
+            };
+
+            Self {
+                qp_state: (attr_mask & ibv_qp_attr_mask::IBV_QP_STATE.0 != 0)
+                    .then_some(attr.qp_state),
+                cur_qp_state: (attr_mask & ibv_qp_attr_mask::IBV_QP_CUR_STATE.0 != 0)
+                    .then_some(attr.cur_qp_state),
+                path_mtu: (attr_mask & ibv_qp_attr_mask::IBV_QP_PATH_MTU.0 != 0)
+                    .then_some(attr.path_mtu),
+                path_mig_state: (attr_mask & ibv_qp_attr_mask::IBV_QP_PATH_MIG_STATE.0 != 0)
+                    .then_some(attr.path_mig_state),
+                qkey: (attr_mask & ibv_qp_attr_mask::IBV_QP_QKEY.0 != 0).then_some(attr.qkey),
+                rq_psn: (attr_mask & ibv_qp_attr_mask::IBV_QP_RQ_PSN.0 != 0).then_some(attr.rq_psn),
+                sq_psn: (attr_mask & ibv_qp_attr_mask::IBV_QP_SQ_PSN.0 != 0).then_some(attr.sq_psn),
+                dest_qp_num: (attr_mask & ibv_qp_attr_mask::IBV_QP_DEST_QPN.0 != 0)
+                    .then_some(attr.dest_qp_num),
+                qp_access_flags: (attr_mask & ibv_qp_attr_mask::IBV_QP_ACCESS_FLAGS.0 != 0)
+                    .then_some(attr.qp_access_flags),
+                cap: (attr_mask & ibv_qp_attr_mask::IBV_QP_CAP.0 != 0).then_some(attr.cap),
+                ah_attr: (attr_mask & ibv_qp_attr_mask::IBV_QP_AV.0 != 0).then_some(attr.ah_attr),
+                alt_ah_attr: (attr_mask & ibv_qp_attr_mask::IBV_QP_ALT_PATH.0 != 0)
+                    .then_some(attr.alt_ah_attr),
+                pkey_index: (attr_mask & ibv_qp_attr_mask::IBV_QP_PKEY_INDEX.0 != 0)
+                    .then_some(attr.pkey_index),
+                alt_pkey_index: (attr_mask & ibv_qp_attr_mask::IBV_QP_ALT_PATH.0 != 0)
+                    .then_some(attr.alt_pkey_index),
+                en_sqd_async_notify: (attr_mask & ibv_qp_attr_mask::IBV_QP_EN_SQD_ASYNC_NOTIFY.0
+                    != 0)
+                    .then_some(attr.en_sqd_async_notify),
+                max_rd_atomic: (attr_mask & ibv_qp_attr_mask::IBV_QP_MAX_QP_RD_ATOMIC.0 != 0)
+                    .then_some(attr.max_rd_atomic),
+                max_dest_rd_atomic: (attr_mask & ibv_qp_attr_mask::IBV_QP_MAX_DEST_RD_ATOMIC.0
+                    != 0)
+                    .then_some(attr.max_dest_rd_atomic),
+                min_rnr_timer: (attr_mask & ibv_qp_attr_mask::IBV_QP_MIN_RNR_TIMER.0 != 0)
+                    .then_some(attr.min_rnr_timer),
+                port_num: (attr_mask & ibv_qp_attr_mask::IBV_QP_PORT.0 != 0)
+                    .then_some(attr.port_num),
+                timeout: (attr_mask & ibv_qp_attr_mask::IBV_QP_TIMEOUT.0 != 0)
+                    .then_some(attr.timeout),
+                retry_cnt: (attr_mask & ibv_qp_attr_mask::IBV_QP_RETRY_CNT.0 != 0)
+                    .then_some(attr.retry_cnt),
+                rnr_retry: (attr_mask & ibv_qp_attr_mask::IBV_QP_RNR_RETRY.0 != 0)
+                    .then_some(attr.rnr_retry),
+                alt_port_num: (attr_mask & ibv_qp_attr_mask::IBV_QP_ALT_PATH.0 != 0)
+                    .then_some(attr.alt_port_num),
+                alt_timeout: (attr_mask & ibv_qp_attr_mask::IBV_QP_ALT_PATH.0 != 0)
+                    .then_some(attr.alt_timeout),
+                rate_limit: (attr_mask & ibv_qp_attr_mask::IBV_QP_RATE_LIMIT.0 != 0)
+                    .then_some(attr.rate_limit),
+                dest_qp_ip,
+            }
+        }
+
+        pub(crate) fn qp_state(&self) -> Option<ibv_qp_state::Type> {
+            self.qp_state
+        }
+
+        pub(crate) fn cur_qp_state(&self) -> Option<ibv_qp_state::Type> {
+            self.cur_qp_state
+        }
+
+        pub(crate) fn path_mtu(&self) -> Option<ibv_mtu> {
+            self.path_mtu
+        }
+
+        pub(crate) fn path_mig_state(&self) -> Option<ibv_mig_state> {
+            self.path_mig_state
+        }
+
+        pub(crate) fn qkey(&self) -> Option<u32> {
+            self.qkey
+        }
+
+        pub(crate) fn rq_psn(&self) -> Option<u32> {
+            self.rq_psn
+        }
+
+        pub(crate) fn sq_psn(&self) -> Option<u32> {
+            self.sq_psn
+        }
+
+        pub(crate) fn dest_qp_num(&self) -> Option<u32> {
+            self.dest_qp_num
+        }
+
+        pub(crate) fn qp_access_flags(&self) -> Option<::std::os::raw::c_uint> {
+            self.qp_access_flags
+        }
+
+        pub(crate) fn cap(&self) -> Option<ibv_qp_cap> {
+            self.cap
+        }
+
+        pub(crate) fn ah_attr(&self) -> Option<ibv_ah_attr> {
+            self.ah_attr
+        }
+
+        pub(crate) fn alt_ah_attr(&self) -> Option<ibv_ah_attr> {
+            self.alt_ah_attr
+        }
+
+        pub(crate) fn pkey_index(&self) -> Option<u16> {
+            self.pkey_index
+        }
+
+        pub(crate) fn alt_pkey_index(&self) -> Option<u16> {
+            self.alt_pkey_index
+        }
+
+        pub(crate) fn en_sqd_async_notify(&self) -> Option<u8> {
+            self.en_sqd_async_notify
+        }
+
+        pub(crate) fn max_rd_atomic(&self) -> Option<u8> {
+            self.max_rd_atomic
+        }
+
+        pub(crate) fn max_dest_rd_atomic(&self) -> Option<u8> {
+            self.max_dest_rd_atomic
+        }
+
+        pub(crate) fn min_rnr_timer(&self) -> Option<u8> {
+            self.min_rnr_timer
+        }
+
+        pub(crate) fn port_num(&self) -> Option<u8> {
+            self.port_num
+        }
+
+        pub(crate) fn timeout(&self) -> Option<u8> {
+            self.timeout
+        }
+
+        pub(crate) fn retry_cnt(&self) -> Option<u8> {
+            self.retry_cnt
+        }
+
+        pub(crate) fn rnr_retry(&self) -> Option<u8> {
+            self.rnr_retry
+        }
+
+        pub(crate) fn alt_port_num(&self) -> Option<u8> {
+            self.alt_port_num
+        }
+
+        pub(crate) fn alt_timeout(&self) -> Option<u8> {
+            self.alt_timeout
+        }
+
+        pub(crate) fn rate_limit(&self) -> Option<u32> {
+            self.rate_limit
+        }
+
+        pub(crate) fn dest_qp_ip(&self) -> Option<Ipv4Addr> {
+            self.dest_qp_ip
         }
     }
 }

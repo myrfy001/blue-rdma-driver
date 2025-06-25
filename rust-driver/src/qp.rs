@@ -16,29 +16,6 @@ use crate::{
     utils::Psn,
 };
 
-#[derive(Default, Clone, Copy)]
-pub(crate) struct QpAttr {
-    pub(crate) qp_type: u8,
-    pub(crate) qpn: u32,
-    pub(crate) dqpn: u32,
-    pub(crate) ip: u32,
-    pub(crate) dqp_ip: u32,
-    pub(crate) mac_addr: u64,
-    pub(crate) pmtu: u8,
-    pub(crate) access_flags: u8,
-    pub(crate) send_cq: Option<u32>,
-    pub(crate) recv_cq: Option<u32>,
-}
-
-impl QpAttr {
-    pub(crate) fn new_with_ip(ip: u32) -> Self {
-        Self {
-            ip,
-            ..Default::default()
-        }
-    }
-}
-
 /// Manages QPs
 pub(crate) struct QpManager {
     /// Bitmap tracking allocated QPNs

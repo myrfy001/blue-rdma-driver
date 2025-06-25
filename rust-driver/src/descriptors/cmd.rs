@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 use crate::impl_desc_serde;
-use crate::ringbuf_desc::{DescDeserialize, DescSerialize};
+use crate::ringbuf::{DescDeserialize, DescSerialize};
 
 use super::RingBufDescCommonHead;
 

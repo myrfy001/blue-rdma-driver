@@ -9,12 +9,12 @@ use default_net::gateway;
 use ipnetwork::{IpNetwork, Ipv4Network};
 use pnet::datalink;
 
-use crate::net::config::NetworkConfig;
+use crate::{
+    constants::{BLUE_RDMA_NETDEV_INTERFACE_NAME, BLUE_RDMA_SYSFS_PATH},
+    net::config::NetworkConfig,
+};
 
 use super::config::MacAddress;
-
-const BLUE_RDMA_SYSFS_PATH: &str = "/sys/class/infiniband/bluerdma0";
-const BLUE_RDMA_NETDEV_INTERFACE_NAME: &str = "blue0";
 
 pub(crate) struct NetConfigReader;
 

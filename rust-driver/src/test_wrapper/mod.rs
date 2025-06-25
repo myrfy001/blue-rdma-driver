@@ -22,11 +22,11 @@ use ipnetwork::Ipv4Network;
 use crate::{
     cmd::CommandConfigurator,
     descriptors::{SendQueueReqDescSeg0, SendQueueReqDescSeg1},
-    device::{ffi::EmulatedHwDevice, ops::HwDevice},
     net::config::{MacAddress, NetworkConfig},
-    ringbuf_desc::{DescRingBufAllocator, DescRingBuffer},
-    send::{ChunkPos, QpParams, SendQueue, SendQueueDesc, WorkReqOpCode, WrChunkBuilder},
+    ringbuf::{DescRingBufAllocator, DescRingBuffer},
     utils::Psn,
+    verbs::dev::{EmulatedHwDevice, HwDevice},
+    workers::send::{ChunkPos, QpParams, SendQueue, SendQueueDesc, WorkReqOpCode, WrChunkBuilder},
 };
 
 pub fn test_full_rb() -> io::Result<()> {

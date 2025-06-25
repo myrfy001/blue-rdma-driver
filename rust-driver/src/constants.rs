@@ -1,3 +1,5 @@
+use std::net::Ipv4Addr;
+
 /// Maximum number of bits used to represent a PSN.
 pub(crate) const MAX_PSN_SIZE_BITS: usize = 24;
 /// Maximum size of the PSN window. This represents the maximum number outstanding PSNs.
@@ -26,3 +28,31 @@ pub(crate) const CARD_MAC_ADDRESS: u64 = 0xAABB_CCDD_EE0A;
 pub(crate) const CARD_MAC_ADDRESS_OCTETS: [u8; 6] = [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0x0A];
 
 pub(crate) const MAX_PD_CNT: usize = 256;
+
+/// (Max) size of a single WR chunk
+pub(crate) const WR_CHUNK_SIZE: u32 = 0x10000;
+
+/// Ack timeout config
+pub(crate) const DEFAULT_INIT_RETRY_COUNT: usize = 5;
+pub(crate) const DEFAULT_TIMEOUT_CHECK_DURATION: u8 = 8;
+pub(crate) const DEFAULT_LOCAL_ACK_TIMEOUT: u8 = 4;
+
+pub(crate) const POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
+pub(crate) const POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 2);
+
+pub(crate) const BLUE_RDMA_SYSFS_PATH: &str = "/sys/class/infiniband/bluerdma0";
+pub(crate) const BLUE_RDMA_NETDEV_INTERFACE_NAME: &str = "blue0";
+
+pub(crate) const U_DMA_BUF_CLASS_PATH: &str = "/sys/class/u-dma-buf/udmabuf0";
+
+pub(crate) const PAGE_SIZE_2MB: usize = 1 << 21;
+
+pub(crate) const MAX_MR_CNT: usize = 8192;
+pub(crate) const LR_KEY_KEY_PART_WIDTH: u32 = 8;
+pub(crate) const LR_KEY_IDX_PART_WIDTH: u32 = 32 - LR_KEY_KEY_PART_WIDTH;
+/// Maximum number of entries in the secodn stage table
+pub(crate) const PGT_LEN: usize = 0x20000;
+
+pub(crate) const VENDER_ID: u16 = 0x10ee;
+pub(crate) const DEVICE_ID: u16 = 0x903f;
+pub(crate) const PCI_SYSFS_BUS_PATH: &str = "/sys/bus/pci/devices";

@@ -6,13 +6,13 @@ use crate::{
         CmdQueueReqDescSetRawPacketReceiveMeta, CmdQueueReqDescUpdateMrTable,
         CmdQueueReqDescUpdatePGT, CmdQueueRespDescOnlyCommonHeader,
     },
-    device::{
+    csr::{
         proxy::{CmdQueueCsrProxy, CmdRespQueueCsrProxy},
         CsrReaderAdaptor, CsrWriterAdaptor, DeviceAdaptor,
     },
     mem::page::ContiguousPages,
     net::config::NetworkConfig,
-    ringbuf_desc::{DescDeserialize, DescRingBuffer},
+    ringbuf::{DescDeserialize, DescRingBuffer},
 };
 
 /// Command queue for submitting commands to the device

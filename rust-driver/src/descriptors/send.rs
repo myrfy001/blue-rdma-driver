@@ -2,8 +2,8 @@ use bilge::prelude::*;
 
 use crate::{
     impl_desc_serde,
-    ringbuf_desc::{DescDeserialize, DescSerialize},
-    send::WorkReqOpCode,
+    ringbuf::{DescDeserialize, DescSerialize},
+    workers::send::WorkReqOpCode,
 };
 
 use super::RingBufDescCommonHead;
