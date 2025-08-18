@@ -94,6 +94,8 @@ pub unsafe trait RdmaCtxOps {
 }
 
 #[repr(C)]
+// this struct represent the `bluerdma_device` struct in `bluerdma.h` at `rdma-core/providers/bluerdma/`
+// the padding size should match the C's definition. 
 struct BlueRdmaDevice {
     pad: [u8; 712],
     driver: *mut core::ffi::c_void,

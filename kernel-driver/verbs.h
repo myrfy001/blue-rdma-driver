@@ -3,6 +3,7 @@
 #ifndef __BLUERDMA_VERBS_H__
 #define __BLUERDMA_VERBS_H__
 
+#include <linux/version.h>
 #include <rdma/ib_verbs.h>
 
 #pragma region mandatory methods
@@ -26,8 +27,16 @@ int bluerdma_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 int bluerdma_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 		       const struct ib_recv_wr **bad_wr);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6,11,0)
 int bluerdma_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 		       struct ib_udata *udata);
+#else
+int bluerdma_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+		       struct uverbs_attr_bundle *attrs);
+#endif
+
+
+
 int bluerdma_destroy_cq(struct ib_cq *cq, struct ib_udata *udata);
 int bluerdma_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc);
 
