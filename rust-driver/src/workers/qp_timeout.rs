@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{error, trace, warn};
+use log::{debug, error, trace, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::{

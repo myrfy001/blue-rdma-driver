@@ -7,8 +7,9 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <fcntl.h>
 
-#define BUF_SIZE (1024UL * 1024 * 1024)
+#define BUF_SIZE (32UL * 1024 * 1024)
 #define MSG_LEN (0x1000 - 1023)
 
 const uint64_t SRC_BUFFER_OFFSET = 0;
@@ -42,6 +43,11 @@ int run_single_mr(int msg_len) {
   if (buffer == MAP_FAILED) {
     die("Map failed");
   }
+
+#ifdef COMPILE_FOR_RTL_SIMULATOR_TEST
+  buffer = (char*)0x7f7e8e600000;
+#endif
+
   src_buffer = buffer;
   dst_buffer = buffer + BUF_SIZE;
   dev_list = ibv_get_device_list(&num_devices);

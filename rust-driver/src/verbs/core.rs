@@ -2,7 +2,7 @@ use std::ptr::NonNull;
 use std::{io, net::Ipv4Addr, ptr};
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use log::error;
+use log::{error, info};
 
 use crate::constants::{
     POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS, POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS,
@@ -91,7 +91,7 @@ impl BlueRdmaCore {
             _ => unreachable!("unexpected sysfs_name"),
         };
 
-        let ack = AckTimeoutConfig::new(16, 18, 100);
+        let ack = AckTimeoutConfig::new(16, 20, 2);
         let config = DeviceConfig { ack };
         // (check_duration, local_ack_timeout) : (256ms, 1s) because emulator is slow
         HwDeviceCtx::initialize(device, config)
@@ -123,7 +123,7 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
         let ctx = BlueRdmaCore::new_emulated(&name);
         #[cfg(feature = "mock")]
         let ctx = BlueRdmaCore::new_mock(&name);
-
+        
         match ctx {
             Ok(x) => Box::into_raw(Box::new(x)).cast(),
             Err(err) => {
@@ -373,7 +373,7 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
                 Box::into_raw(ibv_mr)
             }
             Err(err) => {
-                error!("Failed to register MR");
+                error!("Failed to register MR, {err}");
                 ptr::null_mut()
             }
         }

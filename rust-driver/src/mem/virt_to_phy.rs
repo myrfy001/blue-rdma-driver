@@ -3,6 +3,8 @@ use std::{
     io::{self, Read, Seek},
 };
 
+use log::debug;
+
 /// Size of the PFN (Page Frame Number) mask in bytes
 const PFN_MASK_SIZE: usize = 8;
 /// PFN are bits 0-54 (see pagemap.txt in Linux Documentation)
@@ -173,6 +175,7 @@ impl PhysAddrResolverEmulated {
 
 impl AddressResolver for PhysAddrResolverEmulated {
     fn virt_to_phys(&self, virt_addr: u64) -> io::Result<Option<u64>> {
+        debug!("virt_addr = {virt_addr:x}, heap_start_addr={:x}\n", self.heap_start_addr);
         Ok(virt_addr.checked_sub(self.heap_start_addr))
     }
 }

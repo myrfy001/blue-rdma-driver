@@ -1,6 +1,6 @@
 use std::io;
 
-use log::error;
+use log::{error, debug};
 
 use crate::{
     constants::PSN_MASK,
@@ -142,6 +142,7 @@ impl<Dev: DeviceAdaptor> MetaReportQueueHandler<Dev> {
                     }
                 }
             };
+            debug!("meta report queue {i} got new desc: {meta:?}");
             return Some(meta);
         }
         None

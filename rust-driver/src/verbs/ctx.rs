@@ -8,6 +8,7 @@ use std::{
 
 use crossbeam_deque::Worker;
 use parking_lot::Mutex;
+use log::{debug, info};
 
 use crate::{
     cmd::{CommandConfigurator, MttUpdate, PgtUpdate, RecvBufferMeta, UpdateQp},
@@ -240,8 +241,8 @@ where
         fn chunks(entry: PgtEntry) -> Vec<PgtEntry> {
             /// Maximum number of Page Table entries (PGT entries) that can be allocated in a single `PCIe` transaction.
             /// A `PCIe` transaction size is 128 bytes, and each PGT entry is a u64 (8 bytes).
-            /// Therefore, 512 bytes / 8 bytes per entry = 16 entries per allocation.
-            const MAX_NUM_PGT_ENTRY_PER_ALLOC: usize = 64;
+            /// Therefore, 128 bytes / 8 bytes per entry = 16 entries per allocation.
+            const MAX_NUM_PGT_ENTRY_PER_ALLOC: usize = 16;
 
             let base_index = entry.index;
             let end_index = base_index + entry.count;
@@ -257,6 +258,7 @@ where
         let umem_handler = self.device.new_umem_handler();
         umem_handler.pin_pages(addr, length)?;
         let num_pages = get_num_page(addr, length);
+        debug!("generate page table entries: addr=0x{addr:x}, length=0x{length:x} --> num_pages={num_pages}");
         let (mr_key, pgt_entry) = self.mtt.register(num_pages)?;
         let length_u32 = u32::try_from(length)
             .map_err(|_err| RdmaError::InvalidInput("Length too large".into()))?;
@@ -279,6 +281,7 @@ where
                 .collect();
             buf.copy_from(0, &bytes);
             let pgt_update = PgtUpdate::new(self.mtt_buffer.phys_addr, index, count - 1);
+            debug!("new pgt update request: {pgt_update:?}");
             self.cmd_controller.update_pgt(pgt_update);
         }
 
