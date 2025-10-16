@@ -44,7 +44,7 @@ impl QpManager {
 
     /// Removes and returns the QP associated with the given QPN
     pub(crate) fn destroy_qp(&mut self, qpn: u32) -> bool {
-        let index = index(qpn);
+        let index = qpn_to_index(qpn);
         let ret = self.bitmap.get(index).is_some_and(|x| *x);
         self.bitmap.set(index, false);
 
@@ -90,7 +90,7 @@ impl SendQueueContext {
 }
 
 #[allow(clippy::as_conversions)] // u32 to usize
-fn index(qpn: u32) -> usize {
+pub(crate) fn qpn_to_index(qpn: u32) -> usize {
     (qpn >> QPN_KEY_PART_WIDTH) as usize
 }
 
@@ -144,29 +144,29 @@ impl<T> QpTable<T> {
     }
 
     pub(crate) fn get_qp(&self, qpn: u32) -> Option<&T> {
-        self.inner.get(qpn_index(qpn))
+        self.inner.get(qpn_to_index(qpn))
     }
 
     pub(crate) fn get_qp_mut(&mut self, qpn: u32) -> Option<&mut T> {
-        self.inner.get_mut(qpn_index(qpn))
+        self.inner.get_mut(qpn_to_index(qpn))
     }
 
     pub(crate) fn map_qp<R, F>(&self, qpn: u32, f: F) -> Option<R>
     where
         F: FnMut(&T) -> R,
     {
-        self.inner.get(qpn_index(qpn)).map(f)
+        self.inner.get(qpn_to_index(qpn)).map(f)
     }
 
     pub(crate) fn map_qp_mut<R, F>(&mut self, qpn: u32, f: F) -> Option<R>
     where
         F: FnOnce(&mut T) -> R,
     {
-        self.inner.get_mut(qpn_index(qpn)).map(f)
+        self.inner.get_mut(qpn_to_index(qpn)).map(f)
     }
 
     pub(crate) fn replace(&mut self, qpn: u32, mut t: T) -> Option<T> {
-        if let Some(x) = self.inner.get_mut(qpn_index(qpn)) {
+        if let Some(x) = self.inner.get_mut(qpn_to_index(qpn)) {
             mem::swap(x, &mut t);
             Some(t)
         } else {
@@ -214,25 +214,25 @@ impl<T> QpTableShared<T> {
     where
         T: Copy,
     {
-        self.inner.get(qpn_index(qpn)).map(|x| *x.lock())
+        self.inner.get(qpn_to_index(qpn)).map(|x| *x.lock())
     }
 
     pub(crate) fn map_qp<R, F>(&self, qpn: u32, mut f: F) -> Option<R>
     where
         F: FnMut(&T) -> R,
     {
-        self.inner.get(qpn_index(qpn)).map(|x| f(&x.lock()))
+        self.inner.get(qpn_to_index(qpn)).map(|x| f(&x.lock()))
     }
 
     pub(crate) fn map_qp_mut<R, F>(&self, qpn: u32, f: F) -> Option<R>
     where
         F: FnOnce(&mut T) -> R,
     {
-        self.inner.get(qpn_index(qpn)).map(|x| f(&mut x.lock()))
+        self.inner.get(qpn_to_index(qpn)).map(|x| f(&mut x.lock()))
     }
 
     pub(crate) fn replace(&self, qpn: u32, mut t: T) -> Option<T> {
-        if let Some(x) = self.inner.get(qpn_index(qpn)) {
+        if let Some(x) = self.inner.get(qpn_to_index(qpn)) {
             mem::swap(&mut *x.lock(), &mut t);
             Some(t)
         } else {
@@ -251,9 +251,4 @@ impl<T: Default> Default for QpTableShared<T> {
     fn default() -> Self {
         Self::new_with(T::default)
     }
-}
-
-#[allow(clippy::as_conversions)] // u32 to usize
-pub(crate) fn qpn_index(qpn: u32) -> usize {
-    (qpn >> QPN_KEY_PART_WIDTH) as usize
 }

@@ -2,7 +2,7 @@ use std::{collections::VecDeque, iter, ops::ControlFlow, sync::Arc};
 
 use bitvec::vec::BitVec;
 use crossbeam_queue::SegQueue;
-use log::trace;
+use log::{debug, trace};
 use parking_lot::Mutex;
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
     rdma_utils::{
         msn::Msn,
         psn::Psn,
-        qp::{QpTable, QpTableShared},
+        qp::{QpTable, QpTableShared, qpn_to_index},
         types::QpAttr,
     },
     workers::{
@@ -72,6 +72,7 @@ impl SingleThreadTaskWorker for CompletionWorker {
     type Task = CompletionTask;
 
     fn process(&mut self, task: Self::Task) {
+        debug!("CompletionWorker got task: {:?}", task);
         let qpn = match task {
             CompletionTask::Register { qpn, .. }
             | CompletionTask::AckSend { qpn, .. }
@@ -337,8 +338,11 @@ trait EventMeta {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Event {
+    // Generated when verbs that will transmit packet called, e.g., read or write
     Send(SendEvent),
+    // Generated when NIC receive all kinds of header meta.
     Recv(RecvEvent),
+    //Generated when verbs post_recv api called
     PostRecv(PostRecvEvent),
 }
 

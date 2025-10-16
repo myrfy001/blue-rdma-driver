@@ -17,13 +17,11 @@ use crate::{
     csr::{mode::Mode, DeviceAdaptor},
     mem::{
         get_num_page, page::PageAllocator, pin_pages, virt_to_phy::AddressResolver, DmaBuf,
-        DmaBufAllocator, MemoryPinner, PageWithPhysAddr, UmemHandler,
+        DmaBufAllocator, MemoryPinner, PageWithPhysAddr, UmemHandler, PAGE_SIZE,
     },
-    net::recv_chan::{
+    net::{config::NetworkConfig, reader::NetConfigReader, recv_chan::{
         post_recv_channel, PostRecvTx, PostRecvTxTable, RecvWorker, RecvWrQueueTable, TcpChannel,
-    },
-    net::simple_nic::SimpleNicController,
-    net::{config::NetworkConfig, reader::NetConfigReader},
+    }, simple_nic::SimpleNicController},
     rdma_utils::{
         mtt::{Mtt, PgtEntry},
         pd::PdTable,
@@ -96,13 +94,17 @@ where
     H::UmemHandler: UmemHandler,
 {
     pub(crate) fn initialize(device: H, config: DeviceConfig) -> Result<Self> {
+        debug!("begin initializ...");
         let mode = Mode::default();
         let net_config = NetConfigReader::read();
+        debug!("begin device adaptor initializ...");
         let adaptor = device.new_adaptor()?;
+        debug!("device adaptor initialized...");
         let mut allocator = device.new_dma_buf_allocator()?;
         let mut rb_allocator = DescRingBufAllocator::new(&mut allocator);
         let cmd_controller =
-            CommandConfigurator::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)?;
+            CommandConfigurator::init(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)?;
+        debug!("command queue request controller initialized...");
         let send_bufs = iter::repeat_with(|| rb_allocator.alloc())
             .take(mode.num_channel())
             .collect::<std::result::Result<_, _>>()?;
@@ -121,6 +123,8 @@ where
         let rx_buffer_pa = rx_buffer.phys_addr;
         let qp_attr_table =
             QpTableShared::new_with(|| QpAttr::new_with_ip(net_config.ip.ip().to_bits()));
+        
+        debug!("qp table initialized...");
         let qp_manager = QpManager::new();
         let cq_manager = CqManager::new();
         let cq_table = CompletionQueueTable::new();
@@ -131,6 +135,7 @@ where
             rb_allocator.alloc()?,
             rx_buffer,
         )?;
+        debug!("simple_nic_controller initialized...");
         let (simple_nic_tx, simple_nic_rx) = simple_nic_controller.into_split();
         let handle = send::spawn(&adaptor, send_bufs, mode, &abort)?;
         AckResponder::new(qp_attr_table.clone(), Box::new(simple_nic_tx)).spawn(
@@ -149,6 +154,7 @@ where
             abort.clone(),
             Duration::from_nanos(4096u64 << config.ack().check_duration_exp),
         );
+        
         RdmaWriteWorker::new(
             qp_attr_table.clone(),
             handle,
@@ -157,6 +163,7 @@ where
             completion_tx.clone(),
         )
         .spawn(rdma_write_rx, "RdmaWriteWorker", abort.clone());
+
         CompletionWorker::new(
             cq_table.clone_arc(),
             qp_attr_table.clone(),
@@ -165,6 +172,7 @@ where
             rdma_write_tx.clone(),
         )
         .spawn(completion_rx, "CompletionWorker", abort.clone());
+
         meta_report::spawn(
             &adaptor,
             meta_bufs,
@@ -176,8 +184,12 @@ where
             rdma_write_tx.clone(),
             abort.clone(),
         )?;
+        debug!("meta_report worker spawn called...");
+
         cmd_controller.set_network(net_config);
+        debug!("set network param finished...");
         cmd_controller.set_raw_packet_recv_buffer(RecvBufferMeta::new(rx_buffer_pa));
+        debug!("set_raw_packet_recv_buffer finished...");
 
         #[allow(clippy::mem_forget)]
         std::mem::forget(simple_nic_rx); // prevent libc::munmap being called
@@ -262,17 +274,19 @@ where
         let (mr_key, pgt_entry) = self.mtt.register(num_pages)?;
         let length_u32 = u32::try_from(length)
             .map_err(|_err| RdmaError::InvalidInput("Length too large".into()))?;
-        let mut phys_addrs = umem_handler
+        let phys_addrs = umem_handler
             .virt_to_phys_range(addr, num_pages)?
             .into_iter()
             .collect::<Option<Vec<_>>>()
-            .ok_or(RdmaError::MemoryError("Physical address not found".into()))?
-            .into_iter();
+            .ok_or(RdmaError::MemoryError("Physical address not found".into()))?;
+        let phys_addrs_for_debug = phys_addrs.clone();
+            // .into_iter();
         let buf = &mut self.mtt_buffer.buf;
         let base_index = pgt_entry.index;
         let mtt_update = MttUpdate::new(addr, length_u32, mr_key, pd_handle, access, base_index);
         // TODO: makes updates atomic
         self.cmd_controller.update_mtt(mtt_update);
+        let mut phys_addrs = phys_addrs.into_iter();
         for PgtEntry { index, count } in chunks(pgt_entry) {
             let bytes: Vec<u8> = phys_addrs
                 .by_ref()
@@ -282,6 +296,11 @@ where
             buf.copy_from(0, &bytes);
             let pgt_update = PgtUpdate::new(self.mtt_buffer.phys_addr, index, count - 1);
             debug!("new pgt update request: {pgt_update:?}");
+            let mut va_start_for_debug = addr & (!(PAGE_SIZE as u64));
+            for phy_addr in &phys_addrs_for_debug {
+                debug!("pgt map va -> pa: 0x{va_start_for_debug:x} -> 0x{phy_addr:x}");
+                va_start_for_debug += (PAGE_SIZE as u64);
+            }
             self.cmd_controller.update_pgt(pgt_update);
         }
 
@@ -327,6 +346,8 @@ where
             | ibverbs_sys::ibv_access_flags::IBV_ACCESS_REMOTE_READ.0
             | ibverbs_sys::ibv_access_flags::IBV_ACCESS_REMOTE_WRITE.0)
             as u8;
+
+        debug!("before modify qp_attr_table");
         let entry = self
             .qp_attr_table
             .map_qp_mut(qpn, |current| {
@@ -351,16 +372,20 @@ where
             })
             .ok_or(RdmaError::NotFound(format!("QP {qpn} not found",)))?;
 
+        debug!("before send qp update request to hardware");
         self.cmd_controller.update_qp(entry);
 
         let qp = self
             .qp_attr_table
             .get_qp(qpn)
             .ok_or(RdmaError::NotFound(format!("QP {qpn} not found",)))?;
+
         if qp.dqpn != 0 && qp.dqp_ip != 0 && self.post_recv_tx_table.get_qp_mut(qpn).is_none() {
             let dqp_ip = Ipv4Addr::from_bits(qp.dqp_ip);
+            debug!("update_qp get dqp_ip={dqp_ip:?}");
             let (tx, rx) =
                 post_recv_channel::<TcpChannel>(qp.ip.into(), qp.dqp_ip.into(), qpn, qp.dqpn)?;
+            debug!("after create post recv tx and rx table");
             self.post_recv_tx_table.insert(qpn, tx);
             let wr_queue =
                 self.recv_wr_queue_table
@@ -368,6 +393,8 @@ where
                     .ok_or(RdmaError::NotFound(format!(
                         "Receive WR queue for QP {qpn} not found",
                     )))?;
+            
+            debug!("before spawn RecvWorker");
             RecvWorker::new(rx, wr_queue).spawn();
         }
 

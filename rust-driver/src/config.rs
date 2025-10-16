@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{net::config::NetworkConfig, workers::qp_timeout::AckTimeoutConfig};
 
+use log::warn;
+
 const DEFAULT_CONFIG_PATH: &str = "/etc/bluerdma/config.toml";
 
 #[derive(Debug, thiserror::Error)]
@@ -34,7 +36,10 @@ impl ConfigLoader {
 
     /// Loads the configuration from the specified path.
     pub(crate) fn load_from_path(path: &str) -> Result<DeviceConfig, ConfigError> {
-        let content = std::fs::read_to_string(path)?;
+        let Ok(content) = std::fs::read_to_string(path) else {
+            warn!("can't load config from {path}, using default value");
+            return Ok(DeviceConfig::default());
+        };
         let config: DeviceConfig = toml::from_str(&content)?;
         Ok(config)
     }

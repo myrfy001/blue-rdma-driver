@@ -54,7 +54,6 @@ impl<Dev: DeviceAdaptor> SendQueueSync<Dev> {
         for desc in descs {
             assert!(self.send_queue.push(desc), "full send queue");
         }
-        self.sync_head();
         true
     }
 
@@ -105,56 +104,74 @@ impl<Dev> SendWorker<Dev> {
 }
 
 impl<Dev: DeviceAdaptor + Send + 'static> SingleThreadPollingWorker for SendWorker<Dev> {
-    type Task = WrChunk;
+    type Task = Vec<Option<WrChunk>>;
 
     fn poll(&mut self) -> Option<Self::Task> {
         // Pop a task from the local queue, if not empty.
-        self.local.pop().or_else(|| {
-            // Otherwise, we need to look for a task elsewhere.
-            iter::repeat_with(|| {
-                // Try stealing a batch of tasks from the global queue.
-                self.global
-                    .steal_batch_and_pop(&self.local)
-                    // Or try stealing a task from one of the other threads.
-                    .or_else(|| self.remotes.iter().map(Stealer::steal).collect())
-            })
-            // Loop while no task was stolen and any steal operation needs to be retried.
-            .find(|s| !s.is_retry())
-            // Extract the stolen task, if there is one.
-            .and_then(Steal::success)
-        })
+        let mut ret_val = Vec::new();
+        ret_val.reserve(16);
+
+        for _ in 0..16 {
+            let wqe = self.local.pop().or_else(|| {
+                // Otherwise, we need to look for a task elsewhere.
+                iter::repeat_with(|| {
+                    // Try stealing a batch of tasks from the global queue.
+                    self.global
+                        .steal_batch_and_pop(&self.local)
+                        // Or try stealing a task from one of the other threads.
+                        .or_else(|| self.remotes.iter().map(Stealer::steal).collect())
+                })
+                // Loop while no task was stolen and any steal operation needs to be retried.
+                .find(|s| !s.is_retry())
+                // Extract the stolen task, if there is one.
+                .and_then(Steal::success)
+            });
+            ret_val.push(wqe);
+        }
+        
+        Some(ret_val)
     }
 
-    fn process(&mut self, wr: Self::Task) {
-        let fst = SendQueueReqDescSeg0::new(
+    fn process(&mut self, wrs: Self::Task) {
+        let mut has_new_desc = false;
+        for wr in wrs{
+            if let Some(wr) = wr {
+                let fst = SendQueueReqDescSeg0::new(
             wr.opcode,
-            wr.msn,
-            wr.psn.into_inner(),
-            wr.qp_type,
-            wr.dqpn,
-            wr.flags,
-            wr.dqp_ip,
-            wr.raddr,
-            wr.rkey,
-            wr.total_len,
-        );
-        let snd = SendQueueReqDescSeg1::new(
-            wr.opcode,
-            wr.pmtu,
-            wr.is_first,
-            wr.is_last,
-            wr.is_retry,
-            wr.enable_ecn,
-            wr.sqpn,
-            wr.imm,
-            wr.mac_addr,
-            wr.lkey,
-            wr.len,
-            wr.laddr,
-        );
-        let descs = vec![SendQueueDesc::Seg0(fst), SendQueueDesc::Seg1(snd)];
-        if !self.sq.send(descs) {
-            self.local.push(wr);
+                    wr.msn,
+                    wr.psn.into_inner(),
+                    wr.qp_type,
+                    wr.dqpn,
+                    wr.flags,
+                    wr.dqp_ip,
+                    wr.raddr,
+                    wr.rkey,
+                    wr.total_len,
+                );
+                let snd = SendQueueReqDescSeg1::new(
+                    wr.opcode,
+                    wr.pmtu,
+                    wr.is_first,
+                    wr.is_last,
+                    wr.is_retry,
+                    wr.enable_ecn,
+                    wr.sqpn,
+                    wr.imm,
+                    wr.mac_addr,
+                    wr.lkey,
+                    wr.len,
+                    wr.laddr,
+                );
+                let descs = vec![SendQueueDesc::Seg0(fst), SendQueueDesc::Seg1(snd)];
+                if !self.sq.send(descs) {
+                    self.local.push(wr);
+                } else {
+                    has_new_desc = true;
+                }
+            }
+        }
+        if has_new_desc {
+            self.sq.sync_head();
         }
     }
 }

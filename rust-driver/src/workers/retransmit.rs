@@ -7,7 +7,7 @@ use crate::{
     rdma_utils::{
         fragmenter::WrPacketFragmenter,
         psn::Psn,
-        qp::{qpn_index, QpTable},
+        qp::{qpn_to_index, QpTable},
         types::SendWrRdma,
     },
     workers::{

@@ -35,7 +35,7 @@ pub fn test_full_rb() -> io::Result<()> {
     let mut allocator = device.new_dma_buf_allocator().unwrap();
     let mut rb_allocator = DescRingBufAllocator::new(allocator);
     let cmd_controller =
-        CommandConfigurator::init_v2(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)
+        CommandConfigurator::init(&adaptor, rb_allocator.alloc()?, rb_allocator.alloc()?)
             .unwrap();
     let network_config = NetworkConfig {
         ip: Ipv4Network::new("10.0.0.2".parse().unwrap(), 24).unwrap(),

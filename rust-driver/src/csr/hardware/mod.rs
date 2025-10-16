@@ -1,3 +1,4 @@
+use log::debug;
 use memmap2::{MmapMut, MmapOptions};
 use parking_lot::Mutex;
 use pci_driver::{
@@ -20,7 +21,7 @@ use crate::mem::{
 
 use super::DeviceAdaptor;
 
-const BAR_INDEX: usize = 1;
+const BAR_INDEX: usize = 0;
 const BAR_MAP_RANGE_END: u64 = 4096;
 
 #[derive(Clone, Debug)]
@@ -67,6 +68,7 @@ pub(crate) struct SysfsPciCsrAdaptor {
 impl SysfsPciCsrAdaptor {
     pub(crate) fn new(sysfs_path: impl AsRef<Path>) -> io::Result<Self> {
         let bar_path = sysfs_path.as_ref().join(format!("resource{BAR_INDEX}"));
+        debug!("path for user space PCIe BAR access: {bar_path:?}");
         let file = OpenOptions::new().read(true).write(true).open(&bar_path)?;
         let mmap = unsafe { MmapOptions::new().map_mut(&file)? };
 
@@ -89,7 +91,9 @@ impl DeviceAdaptor for SysfsPciCsrAdaptor {
         let bar = self.bar.lock();
         unsafe {
             let ptr = bar.as_ptr().add(addr);
-            Ok(ptr.cast::<u32>().read_volatile())
+            let ret = ptr.cast::<u32>().read_volatile();
+            debug!("read csr: addr=0x{:x}, bar_offset=0x{:x}, val=0x{:x}", ptr as usize, addr, ret);
+            Ok(ret)
         }
     }
 
@@ -104,6 +108,7 @@ impl DeviceAdaptor for SysfsPciCsrAdaptor {
         let mut bar = self.bar.lock();
         unsafe {
             let ptr = bar.as_mut_ptr().add(addr);
+            debug!("write csr: addr=0x{:x}, bar_offset=0x{:x}, val=0x{:x}", ptr as usize, addr, data);
             ptr.cast::<u32>().write_volatile(data);
         }
 

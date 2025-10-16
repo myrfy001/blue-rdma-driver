@@ -6,7 +6,7 @@ use blue_rdma_driver::{BlueRdmaCore, RdmaCtxOps};
 
 #[unsafe(export_name = "bluerdma_init")]
 pub unsafe extern "C" fn init() {
-    let _ = env_logger::try_init();
+    let _ = env_logger::builder().format_timestamp(Some(env_logger::TimestampPrecision::Nanos)).try_init();
 }
 
 /// Safety: caller must ensure `sysfs_name` is a valid pointer.

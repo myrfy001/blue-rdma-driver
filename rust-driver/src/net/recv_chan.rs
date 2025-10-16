@@ -7,11 +7,12 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
+use log::debug;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 
 use crate::rdma_utils::{
-    qp::{qpn_index, QpTable},
+    qp::{qpn_to_index, QpTable},
     types::RecvWr,
 };
 
@@ -57,6 +58,7 @@ impl PostRecvTx for TcpChannelTx {
 
     fn send(&mut self, wr: RecvWr) -> io::Result<()> {
         if self.inner.is_none() {
+            debug!("TcpChannelTx try connect {}:{}", self.addr, qpn_to_port(self.dqpn));
             self.inner = Some(TcpStream::connect((self.addr, qpn_to_port(self.dqpn)))?);
         }
         let stream = self.inner.as_mut().unwrap_or_else(|| unreachable!());
@@ -74,6 +76,7 @@ pub(crate) struct TcpChannelRx {
 
 impl PostRecvRx for TcpChannelRx {
     fn listen(addr: Ipv4Addr, qpn: u32) -> io::Result<Self> {
+        debug!("TcpChannelRx bind port {}", qpn_to_port(qpn));
         let inner = TcpListener::bind((addr, qpn_to_port(qpn)))?;
         Ok(Self {
             inner,
@@ -105,7 +108,7 @@ pub(crate) fn post_recv_channel<C: PostRecvChannel>(
 }
 
 fn qpn_to_port(qpn: u32) -> u16 {
-    let index = qpn_index(qpn);
+    let index = qpn_to_index(qpn);
     BASE_PORT + index as u16
 }
 

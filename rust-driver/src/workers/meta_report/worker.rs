@@ -185,6 +185,7 @@ impl MetaHandler {
     }
 
     pub(crate) fn sender_updates(&self, qpn: u32, base_psn: Psn) {
+        debug!("MetaHandler sender_updates qpn={:?}, base_psn={:?}", qpn, base_psn);
         self.completion_tx
             .send(CompletionTask::AckSend { qpn, base_psn });
         self.packet_retransmit_tx
@@ -194,6 +195,7 @@ impl MetaHandler {
     }
 
     pub(crate) fn receiver_updates(&self, qpn: u32, base_psn: Psn) {
+        debug!("MetaHandler receiver_updates qpn={:?}, base_psn={:?}", qpn, base_psn);
         self.completion_tx
             .send(CompletionTask::AckRecv { qpn, base_psn });
         self.packet_retransmit_tx
@@ -201,6 +203,7 @@ impl MetaHandler {
     }
 
     pub(super) fn handle_header_read(&mut self, meta: HeaderReadMeta) -> Option<()> {
+        debug!("MetaHandler handle_header_read got meta = {:?}", meta);
         if meta.ack_req {
             let end_psn = meta.psn + 1;
             let event = Event::Recv(RecvEvent::new(
@@ -215,6 +218,7 @@ impl MetaHandler {
             });
             let tracker = self.recv_table.get_qp_mut(meta.dqpn)?;
             if let Some(base_psn) = tracker.ack_one(meta.psn) {
+                debug!("send ack 111");
                 self.completion_tx.send(CompletionTask::AckRecv {
                     qpn: meta.dqpn,
                     base_psn,
@@ -259,6 +263,7 @@ impl MetaHandler {
             imm,
             header_type,
         } = meta;
+        debug!("Meta Handler got meta = {:?}", meta);
         let tracker = self.recv_table.get_qp_mut(dqpn)?;
 
         if matches!(pos, PacketPos::Last | PacketPos::Only) {
@@ -271,6 +276,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
+                    debug!("send event to completion_tx queue: event={:?}", event);
                     self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
@@ -281,6 +287,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
+                    debug!("send event to completion_tx queue: event={:?}", event);
                     self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
@@ -291,6 +298,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
+                    debug!("send event to completion_tx queue: event={:?}", event);
                     self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
@@ -301,6 +309,7 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
+                    debug!("send event to completion_tx queue: event={:?}", event);
                     self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
@@ -311,12 +320,14 @@ impl MetaHandler {
                         MessageMeta::new(msn, end_psn),
                         ack_req,
                     ));
+                    debug!("send event to completion_tx queue: event={:?}", event);
                     self.completion_tx
                         .send(CompletionTask::Register { qpn: dqpn, event });
                 }
             }
         }
         if let Some(base_psn) = tracker.ack_one(psn) {
+            debug!("send event 222222222");
             self.completion_tx.send(CompletionTask::AckRecv {
                 qpn: dqpn,
                 base_psn,

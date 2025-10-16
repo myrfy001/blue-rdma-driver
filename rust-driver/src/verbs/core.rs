@@ -2,7 +2,7 @@ use std::ptr::NonNull;
 use std::{io, net::Ipv4Addr, ptr};
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use log::{error, info};
+use log::{error, info, debug};
 
 use crate::constants::{
     POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS, POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS,
@@ -50,18 +50,25 @@ macro_rules! deref_or_ret {
 pub struct BlueRdmaCore;
 
 impl BlueRdmaCore {
-    fn init_logger() {
-        let _ignore = env_logger::try_init();
+    fn check_logger_inited() {
+        assert!(env_logger::try_init().is_err(), "global logger init failed");
     }
 
     #[allow(clippy::unwrap_used, clippy::unwrap_in_result)]
     fn new_hw(sysfs_name: &str) -> Result<HwDeviceCtx<PciHwDevice>> {
-        Self::init_logger();
+        Self::check_logger_inited();
+        debug!("before load default");
         let config = ConfigLoader::load_default()?;
+        debug!("before open default");
         let device = PciHwDevice::open_default()?;
+        
+        debug!("before reset device");
         device.reset()?;
+        
         #[cfg(feature = "debug_csrs")]
         device.set_custom()?;
+
+        debug!("before initialize HwDeviceCtx");
         let mut ctx = HwDeviceCtx::initialize(device, config)?;
         Ok(ctx)
     }
@@ -91,7 +98,7 @@ impl BlueRdmaCore {
             _ => unreachable!("unexpected sysfs_name"),
         };
 
-        let ack = AckTimeoutConfig::new(16, 20, 2);
+        let ack = AckTimeoutConfig::new(16, 40, 2);
         let config = DeviceConfig { ack };
         // (check_duration, local_ack_timeout) : (256ms, 1s) because emulator is slow
         HwDeviceCtx::initialize(device, config)
@@ -117,7 +124,8 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
                 .to_string_lossy()
                 .into_owned()
         };
-        #[cfg(feature = "hw")]
+
+        debug!("before create hardware ctx");
         let ctx = BlueRdmaCore::new_hw(&name);
         #[cfg(feature = "sim")]
         let ctx = BlueRdmaCore::new_emulated(&name);
@@ -326,7 +334,7 @@ unsafe impl RdmaCtxOps for BlueRdmaCore {
         match bluerdma.update_qp(qp.qp_num, IbvQpAttr::new(attr, attr_mask as u32)) {
             Ok(()) => 0,
             Err(err) => {
-                error!("Failed to modify QP: {}", qp.qp_num);
+                error!("Failed to modify QP: qpn=0x{:x}, err={:?}", qp.qp_num, err);
                 err.to_errno()
             }
         }

@@ -35,7 +35,7 @@ pub(crate) const WR_CHUNK_SIZE: u32 = 0x10000;
 /// Ack timeout config
 pub(crate) const DEFAULT_INIT_RETRY_COUNT: usize = 5;
 pub(crate) const DEFAULT_TIMEOUT_CHECK_DURATION: u8 = 8;
-pub(crate) const DEFAULT_LOCAL_ACK_TIMEOUT: u8 = 4;
+pub(crate) const DEFAULT_LOCAL_ACK_TIMEOUT: u8 = 50;
 
 pub(crate) const POST_RECV_TCP_LOOP_BACK_SERVER_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 1);
 pub(crate) const POST_RECV_TCP_LOOP_BACK_CLIENT_ADDRESS: Ipv4Addr = Ipv4Addr::new(127, 0, 0, 2);
@@ -53,6 +53,6 @@ pub(crate) const LR_KEY_IDX_PART_WIDTH: u32 = 32 - LR_KEY_KEY_PART_WIDTH;
 /// Maximum number of entries in the secodn stage table
 pub(crate) const PGT_LEN: usize = 0x20000;
 
-pub(crate) const VENDER_ID: u16 = 0x10ee;
-pub(crate) const DEVICE_ID: u16 = 0x903f;
+pub(crate) const VENDER_ID: u16 = 0x1172;
+pub(crate) const DEVICE_ID: u16 = 0x0000;
 pub(crate) const PCI_SYSFS_BUS_PATH: &str = "/sys/bus/pci/devices";

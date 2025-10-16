@@ -4,6 +4,7 @@ use std::{
     sync::atomic::{fence, Ordering},
     time::Duration,
 };
+use log::debug;
 
 use ipnetwork::IpNetwork;
 use parking_lot::Mutex;
@@ -40,41 +41,19 @@ pub(crate) struct CommandConfigurator<Dev> {
 }
 
 impl<Dev: DeviceAdaptor> CommandConfigurator<Dev> {
-    /// Creates a new command controller instance
-    ///
-    /// # Returns
-    /// A new `CommandConfigurator` with an initialized command queue
-    pub(crate) fn init(
-        dev: &Dev,
-        req_rb: DescRingBuffer,
-        req_rb_base_pa: u64,
-        resp_rb: DescRingBuffer,
-        resp_rb_base_pa: u64,
-    ) -> io::Result<Self> {
-        let mut req_queue = CmdQueue::new(req_rb);
-        let mut resp_queue = CmdRespQueue::new(resp_rb);
-        let req_csr_proxy = CmdQueueCsrProxy(dev.clone());
-        let resp_csr_proxy = CmdRespQueueCsrProxy(dev.clone());
-        req_csr_proxy.write_base_addr(req_rb_base_pa)?;
-        resp_csr_proxy.write_base_addr(resp_rb_base_pa)?;
-
-        Ok(Self {
-            cmd_qp: Mutex::new(CmdQp::new(req_queue, resp_queue)),
-            req_csr_proxy,
-            resp_csr_proxy,
-        })
-    }
 
     /// Creates a new command controller instance
     ///
     /// # Returns
     /// A new `CommandConfigurator` with an initialized command queue
-    pub(crate) fn init_v2(dev: &Dev, req_buf: DmaBuf, resp_buf: DmaBuf) -> io::Result<Self> {
+    pub(crate) fn init(dev: &Dev, req_buf: DmaBuf, resp_buf: DmaBuf) -> io::Result<Self> {
         let mut req_queue = CmdQueue::new(DescRingBuffer::new(req_buf.buf));
         let mut resp_queue = CmdRespQueue::new(DescRingBuffer::new(resp_buf.buf));
         let req_csr_proxy = CmdQueueCsrProxy(dev.clone());
         let resp_csr_proxy = CmdRespQueueCsrProxy(dev.clone());
+        debug!("cmd req queue pa = 0x{:x}", req_buf.phys_addr);
         req_csr_proxy.write_base_addr(req_buf.phys_addr)?;
+        debug!("cmd resp queue pa = 0x{:x}", resp_buf.phys_addr);
         resp_csr_proxy.write_base_addr(resp_buf.phys_addr)?;
 
         Ok(Self {

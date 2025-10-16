@@ -1,5 +1,6 @@
 use std::io;
 
+use log::debug;
 use parking_lot::Mutex;
 
 use crate::{
@@ -7,7 +8,7 @@ use crate::{
     rdma_utils::{
         fragmenter::{WrChunkFragmenter, WrPacketFragmenter},
         psn::Psn,
-        qp::{num_psn, QpTable, QpTableShared, SendQueueContext},
+        qp::{num_psn, QpTable, QpTableShared, SendQueueContext, qpn_to_index},
         types::{QpAttr, SendWrRdma},
     },
     workers::{
@@ -167,10 +168,14 @@ impl RdmaWriteWorker {
     }
 
     fn write(&mut self, qpn: u32, wr: SendWrRdma) -> io::Result<()> {
+        
         let qp = self
             .qp_attr_table
             .get_qp(qpn)
             .ok_or(io::Error::from(io::ErrorKind::InvalidInput))?;
+
+        debug!("write called with sqpn={:?}, dqpn={:?}, wr={:?}", qpn, qp.dqpn, wr);
+
         let addr = wr.raddr();
         let length = wr.length();
         let num_psn =
@@ -220,6 +225,7 @@ impl RdmaWriteWorker {
         if ack_req {
             let fragmenter = WrPacketFragmenter::new(wr, qp_params, psn);
             let Some(last_packet_chunk) = fragmenter.into_iter().last() else {
+                debug!("RdmaWriteWorker handle write early return");
                 return Ok(());
             };
             self.timeout_tx.send(AckTimeoutTask::new_ack_req(qpn));
@@ -235,6 +241,8 @@ impl RdmaWriteWorker {
             self.send_handle.send(chunk);
         }
 
+
+        debug!("RdmaWriteWorker handle write done");
         Ok(())
     }
 }

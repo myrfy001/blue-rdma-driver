@@ -11,7 +11,7 @@ use crate::{
         DEFAULT_INIT_RETRY_COUNT, DEFAULT_LOCAL_ACK_TIMEOUT, DEFAULT_TIMEOUT_CHECK_DURATION,
         MAX_QP_CNT, QPN_KEY_PART_WIDTH,
     },
-    rdma_utils::qp::{qpn_index, QpTable},
+    rdma_utils::qp::{qpn_to_index, QpTable},
     workers::{
         retransmit::PacketRetransmitTask,
         send::SendHandle,
